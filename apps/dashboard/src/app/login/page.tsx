@@ -15,19 +15,24 @@ import { getServerSession } from "@/shared/api/session.server";
 
 const INVITE_TOKEN_REGEX = /^[0-9a-f]{64}$/;
 
+function firstValue(value: string | string[] | undefined): string | undefined {
+	return Array.isArray(value) ? value[0] : value;
+}
+
 export default async function LoginPage({
 	searchParams,
 }: {
-	searchParams: Promise<{ error?: string; error_description?: string }>;
+	searchParams: Promise<{
+		error?: string | string[];
+		error_description?: string | string[];
+	}>;
 }) {
 	const session = await getServerSession();
-	const { error, error_description: errorDescription } = await searchParams;
+	const rawSearchParams = await searchParams;
+	const error = firstValue(rawSearchParams.error);
+	const errorDescription = firstValue(rawSearchParams.error_description);
 
-	// better-auth's OAuth error redirect lands here (see
-	// AuthSpotifySignInButton's errorCallbackURL) — most commonly an
-	// approved-but-not-yet-allowlisted user hitting Spotify's Dev Mode
-	// restriction (#372 will close this properly). No notification system
-	// yet, so log it for now rather than let it pass silently.
+	// No notification system yet — log for admin follow-up instead of failing silently.
 	if (error) {
 		const cookieStore = await cookies();
 		const inviteToken = cookieStore.get("sonaraem_invite")?.value;

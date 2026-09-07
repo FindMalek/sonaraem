@@ -13,8 +13,7 @@ export const waitlistStatusInput = z.object({
 export type WaitlistStatusInput = z.infer<typeof waitlistStatusInput>;
 
 export const spotifyAuthFailureInput = z.object({
-	// Raw sonaraem_invite cookie value, when present — lets the handler
-	// resolve which waitlist signup this was so it can be logged.
+	// Raw sonaraem_invite cookie value — resolves which waitlist signup this was.
 	inviteToken: z
 		.string()
 		.regex(/^[0-9a-f]{64}$/)

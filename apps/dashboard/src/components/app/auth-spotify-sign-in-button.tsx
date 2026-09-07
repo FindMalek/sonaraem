@@ -15,9 +15,7 @@ export function AuthSpotifySignInButton() {
 			await authClient.signIn.social({
 				provider: "spotify",
 				callbackURL: `${env.NEXT_PUBLIC_SONARAEM_DASHBOARD_URL}${DASHBOARD_ROUTES.overview.path}`,
-				// Without this, better-auth's default error redirect lands the
-				// user on api.sonaraem.com (bare API domain, no UI) — most
-				// commonly hit by an approved-but-not-yet-allowlisted user (#372).
+				// Otherwise the default error redirect lands on the bare API domain, no UI.
 				errorCallbackURL: `${env.NEXT_PUBLIC_SONARAEM_DASHBOARD_URL}/login`,
 			});
 		} catch (error) {

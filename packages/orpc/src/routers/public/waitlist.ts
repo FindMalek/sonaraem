@@ -125,12 +125,7 @@ export const waitlistRouter = {
 			};
 		}),
 
-	// Called by the dashboard's /login page when better-auth redirects back
-	// with an OAuth error — most commonly a waitlist-approved user whose
-	// email was never added to Spotify's Dev Mode allowlist (#372 will
-	// close this properly; until then this is the only visibility into it).
-	// No notification system yet, so a structured log line is the interim
-	// signal to grep/alert on.
+	// No notification system yet — logs here are the interim signal to grep/alert on.
 	logSpotifyAuthFailure: publicProcedure
 		.meta({
 			openapi: {
