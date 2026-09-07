@@ -1,0 +1,30 @@
+# Star history chart workflow
+# GitHub restricts the stargazers API to repo admins/collaborators, so the
+# chart is regenerated inside Actions (which has that access) and committed
+# as SVGs the README embeds directly.
+
+name: Star Chart
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  star-chart:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate star chart
+        uses: jal-co/shieldcn@v1
+        with:
+          color: 18181b
+          commit-message: |
+            chore: update star chart [skip ci]
+
+            Co-Authored-By: FindMalek <hi@findmalek.com>

@@ -8,7 +8,8 @@
 		"test": "vitest run",
 		"db:ops:migrate": "tsx src/migrate.ts",
 		"db:ops:generate": "tsx src/generate.ts",
-		"db:ops:status": "tsx src/status.ts"
+		"db:ops:status": "tsx src/status.ts",
+		"db:ops:library-stats": "tsx src/library-stats.ts"
 	},
 	"dependencies": {
 		"@sonaraem/common": "workspace:*",

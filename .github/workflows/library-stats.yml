@@ -1,0 +1,55 @@
+# Library stats snapshot workflow
+# Runs the read-only db-ops library-stats script against production every 3
+# days and commits the refreshed README.md stats block, skipping the commit
+# when nothing changed.
+#
+# Required secret:
+#   PRODUCTION_DATABASE_URL - Production PostgreSQL connection string.
+#   Add it in: GitHub repo → Settings → Secrets and variables → Actions.
+
+name: Library Stats
+
+on:
+  schedule:
+    - cron: "0 9 */3 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  library-stats:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run library stats
+        working-directory: packages/db-ops
+        env:
+          SONARAEM_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: pnpm db:ops:library-stats
+
+      - name: Commit README.md if changed
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "No stats change, skipping commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "chore: refresh library stats" -m "Co-Authored-By: FindMalek <hi@findmalek.com>"
+          git push
