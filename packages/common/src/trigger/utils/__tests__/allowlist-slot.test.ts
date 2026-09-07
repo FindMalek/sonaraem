@@ -1,17 +1,24 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { dbMock, queueMock, waitMock, manageAllowlistEntryMock } = vi.hoisted(
-	() => ({
-		dbMock: { select: vi.fn() },
-		queueMock: {
-			enqueue: vi.fn(),
-			tryAcquireSlot: vi.fn(),
-			releaseSlot: vi.fn(),
-		},
-		waitMock: { for: vi.fn(() => Promise.resolve()) },
-		manageAllowlistEntryMock: { triggerAndWait: vi.fn() },
-	}),
-);
+const {
+	dbMock,
+	queueMock,
+	waitMock,
+	manageAllowlistEntryMock,
+	checkCancelledMock,
+} = vi.hoisted(() => ({
+	dbMock: { select: vi.fn() },
+	queueMock: {
+		enqueue: vi.fn(),
+		tryAcquireSlot: vi.fn(),
+		releaseSlot: vi.fn(),
+		settleWaitingRequest: vi.fn().mockResolvedValue(undefined),
+		failActiveRequestForSlot: vi.fn().mockResolvedValue(undefined),
+	},
+	waitMock: { for: vi.fn(() => Promise.resolve()) },
+	manageAllowlistEntryMock: { triggerAndWait: vi.fn() },
+	checkCancelledMock: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@sonaraem/db", () => ({ db: dbMock }));
 vi.mock("@sonaraem/logger", () => ({
@@ -19,6 +26,10 @@ vi.mock("@sonaraem/logger", () => ({
 }));
 vi.mock("@trigger.dev/sdk", () => ({ wait: waitMock }));
 vi.mock("../../../services/spotify-allowlist", () => queueMock);
+vi.mock("../../../services/organize", () => ({
+	checkCancelled: checkCancelledMock,
+	PipelineCancelledError: class PipelineCancelledError extends Error {},
+}));
 vi.mock("../../tasks/spotify-allowlist/manage-allowlist-entry", () => ({
 	manageAllowlistEntryTask: manageAllowlistEntryMock,
 }));
@@ -26,6 +37,7 @@ vi.mock("../../tasks/spotify-allowlist/manage-allowlist-entry", () => ({
 import { user } from "@sonaraem/db/schema/auth";
 import { pipelineRun } from "@sonaraem/db/schema/pipeline-run";
 
+import { PipelineCancelledError } from "../../../services/organize";
 import {
 	AllowlistSlotTimeoutError,
 	withAllowlistSlot,
@@ -54,6 +66,7 @@ function mockAllowlistEntryResult(unwrap: () => Promise<unknown>) {
 describe("withAllowlistSlot", () => {
 	afterEach(() => {
 		vi.clearAllMocks();
+		checkCancelledMock.mockResolvedValue(undefined);
 	});
 
 	it("acquires immediately, adds the email, runs the work, removes it, and releases the slot", async () => {
@@ -77,6 +90,7 @@ describe("withAllowlistSlot", () => {
 		});
 		expect(work).toHaveBeenCalledTimes(1);
 		expect(queueMock.releaseSlot).toHaveBeenCalledWith(9);
+		expect(queueMock.failActiveRequestForSlot).not.toHaveBeenCalled();
 		expect(waitMock.for).not.toHaveBeenCalled();
 	});
 
@@ -105,9 +119,10 @@ describe("withAllowlistSlot", () => {
 		expect(result).toBe("ok");
 		expect(queueMock.tryAcquireSlot).toHaveBeenCalledTimes(3);
 		expect(waitMock.for).toHaveBeenCalledTimes(2);
+		expect(checkCancelledMock).toHaveBeenCalledTimes(4); // 3 poll iterations + 1 pre-add check
 	});
 
-	it("removes the email and releases the slot even when the work throws", async () => {
+	it("records the work failure as a failed request and releases the slot when removal succeeds", async () => {
 		mockDbLookups({ triggeredBy: "user" });
 		queueMock.enqueue.mockResolvedValue({ requestId: 1, alreadyQueued: false });
 		queueMock.tryAcquireSlot.mockResolvedValue({ acquired: true, slotId: 7 });
@@ -123,7 +138,37 @@ describe("withAllowlistSlot", () => {
 			email: "user@example.com",
 			action: "remove",
 		});
-		expect(queueMock.releaseSlot).toHaveBeenCalledWith(7);
+		expect(queueMock.releaseSlot).toHaveBeenCalledWith(7, {
+			outcome: "failed",
+			error: "sync blew up",
+		});
+		expect(queueMock.failActiveRequestForSlot).not.toHaveBeenCalled();
+	});
+
+	it("leaves the slot occupied for reclaim when the work fails and removal also fails", async () => {
+		mockDbLookups({ triggeredBy: "user" });
+		queueMock.enqueue.mockResolvedValue({ requestId: 1, alreadyQueued: false });
+		queueMock.tryAcquireSlot.mockResolvedValue({ acquired: true, slotId: 7 });
+		manageAllowlistEntryMock.triggerAndWait
+			.mockReturnValueOnce({
+				unwrap: () => Promise.resolve({ confirmed: true }),
+			}) // add
+			.mockReturnValueOnce({
+				unwrap: () =>
+					Promise.reject(new Error("dashboard rejected the remove")),
+			}); // remove
+
+		await expect(
+			withAllowlistSlot("u4", 1, async () => {
+				throw new Error("sync blew up");
+			}),
+		).rejects.toThrow("sync blew up");
+
+		expect(queueMock.releaseSlot).not.toHaveBeenCalled();
+		expect(queueMock.failActiveRequestForSlot).toHaveBeenCalledWith(
+			7,
+			"sync blew up",
+		);
 	});
 
 	it("releases the slot without running work when adding the email fails", async () => {
@@ -140,7 +185,33 @@ describe("withAllowlistSlot", () => {
 		);
 
 		expect(work).not.toHaveBeenCalled();
-		expect(queueMock.releaseSlot).toHaveBeenCalledWith(4);
+		expect(queueMock.releaseSlot).toHaveBeenCalledWith(4, {
+			outcome: "failed",
+			error: "dashboard rejected the add",
+		});
+	});
+
+	it("returns the result but records a failed request when the final removal fails", async () => {
+		mockDbLookups({ triggeredBy: "user" });
+		queueMock.enqueue.mockResolvedValue({ requestId: 1, alreadyQueued: false });
+		queueMock.tryAcquireSlot.mockResolvedValue({ acquired: true, slotId: 7 });
+		manageAllowlistEntryMock.triggerAndWait
+			.mockReturnValueOnce({
+				unwrap: () => Promise.resolve({ confirmed: true }),
+			}) // add
+			.mockReturnValueOnce({
+				unwrap: () =>
+					Promise.reject(new Error("dashboard rejected the remove")),
+			}); // remove
+
+		const result = await withAllowlistSlot("u7", 1, async () => "ok");
+
+		expect(result).toBe("ok");
+		expect(queueMock.releaseSlot).not.toHaveBeenCalled();
+		expect(queueMock.failActiveRequestForSlot).toHaveBeenCalledWith(
+			7,
+			"dashboard rejected the remove",
+		);
 	});
 
 	it("throws AllowlistSlotTimeoutError when the pool never frees up", async () => {
@@ -165,5 +236,45 @@ describe("withAllowlistSlot", () => {
 		);
 		expect(work).not.toHaveBeenCalled();
 		expect(queueMock.releaseSlot).not.toHaveBeenCalled();
+		expect(queueMock.settleWaitingRequest).toHaveBeenCalledWith(
+			1,
+			"failed",
+			"Timed out waiting for a free Spotify allowlist slot",
+		);
+	});
+
+	it("settles the request as cancelled and stops polling when the run is cancelled", async () => {
+		mockDbLookups({ triggeredBy: "user" });
+		queueMock.enqueue.mockResolvedValue({ requestId: 3, alreadyQueued: false });
+		checkCancelledMock.mockRejectedValueOnce(new PipelineCancelledError());
+
+		const work = vi.fn();
+		await expect(withAllowlistSlot("u8", 1, work)).rejects.toThrow(
+			PipelineCancelledError,
+		);
+
+		expect(work).not.toHaveBeenCalled();
+		expect(queueMock.tryAcquireSlot).not.toHaveBeenCalled();
+		expect(queueMock.settleWaitingRequest).toHaveBeenCalledWith(3, "cancelled");
+	});
+
+	it("releases the slot as cancelled when the run is cancelled right after acquiring it", async () => {
+		mockDbLookups({ triggeredBy: "user" });
+		queueMock.enqueue.mockResolvedValue({ requestId: 4, alreadyQueued: false });
+		queueMock.tryAcquireSlot.mockResolvedValue({ acquired: true, slotId: 11 });
+		checkCancelledMock
+			.mockResolvedValueOnce(undefined) // poll-loop check, before acquiring
+			.mockRejectedValueOnce(new PipelineCancelledError()); // pre-add check
+
+		const work = vi.fn();
+		await expect(withAllowlistSlot("u9", 1, work)).rejects.toThrow(
+			PipelineCancelledError,
+		);
+
+		expect(work).not.toHaveBeenCalled();
+		expect(manageAllowlistEntryMock.triggerAndWait).not.toHaveBeenCalled();
+		expect(queueMock.releaseSlot).toHaveBeenCalledWith(11, {
+			outcome: "cancelled",
+		});
 	});
 });

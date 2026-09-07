@@ -195,11 +195,18 @@ export async function tryAcquireSlot(
 	});
 }
 
+export type RequestOutcome = "done" | "failed" | "cancelled";
+
 // Goes straight back to available — the caller only calls this after the
-// real removal from the dashboard is already confirmed, so there's no stray
-// state left behind to protect against. Anti-detection spacing is enforced
-// globally in manageAllowlistEntryTask, not by holding capacity idle here.
-export async function releaseSlot(slotId: number): Promise<void> {
+// real removal from the dashboard is already confirmed (or the slot never
+// actually landed on the dashboard at all), so there's no stray state left
+// behind to protect against. Anti-detection spacing is enforced globally in
+// manageAllowlistEntryTask, not by holding capacity idle here.
+export async function releaseSlot(
+	slotId: number,
+	opts: { outcome?: RequestOutcome; error?: string } = {},
+): Promise<void> {
+	const { outcome = "done", error } = opts;
 	const now = new Date();
 
 	await db.transaction(async (tx) => {
@@ -215,7 +222,7 @@ export async function releaseSlot(slotId: number): Promise<void> {
 
 		await tx
 			.update(spotifyAllowlistQueueRequest)
-			.set({ status: "done", completedAt: now })
+			.set({ status: outcome, completedAt: now, error: error ?? null })
 			.where(
 				and(
 					eq(spotifyAllowlistQueueRequest.slotId, slotId),
@@ -223,6 +230,45 @@ export async function releaseSlot(slotId: number): Promise<void> {
 				),
 			);
 	});
+}
+
+// For a request that never acquired a slot (still `waiting`) — a timeout or a
+// cancellation detected while polling. There's no slot to touch.
+export async function settleWaitingRequest(
+	requestId: number,
+	outcome: "failed" | "cancelled",
+	error?: string,
+): Promise<void> {
+	await db
+		.update(spotifyAllowlistQueueRequest)
+		.set({ status: outcome, completedAt: new Date(), error: error ?? null })
+		.where(
+			and(
+				eq(spotifyAllowlistQueueRequest.id, requestId),
+				eq(spotifyAllowlistQueueRequest.status, "waiting"),
+			),
+		);
+}
+
+// For a request whose slot's real dashboard state is UNKNOWN — a remove call
+// itself failed, so the email may still be on the real Spotify account.
+// Deliberately does NOT touch the slot: it's left `occupied` so the existing
+// crash-timeout sweep (timeoutReclaim, bounded by DEFAULT_OCCUPIED_TIMEOUT_MS)
+// picks it up and retries the real removal, rather than handing the slot to a
+// new acquirer while the dashboard might still list this email.
+export async function failActiveRequestForSlot(
+	slotId: number,
+	error: string,
+): Promise<void> {
+	await db
+		.update(spotifyAllowlistQueueRequest)
+		.set({ status: "failed", completedAt: new Date(), error })
+		.where(
+			and(
+				eq(spotifyAllowlistQueueRequest.slotId, slotId),
+				eq(spotifyAllowlistQueueRequest.status, "active"),
+			),
+		);
 }
 
 export type ReclaimedSlot = { slotId: number; email: string | null };

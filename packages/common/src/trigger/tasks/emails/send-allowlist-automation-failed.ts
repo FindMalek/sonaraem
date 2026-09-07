@@ -14,10 +14,17 @@ export const sendAllowlistAutomationFailedEmailTask = task({
 		action: "add" | "remove";
 		errorMessage: string;
 	}) => {
-		return await sendAllowlistAutomationFailedNotification({
+		const result = await sendAllowlistAutomationFailedNotification({
 			targetEmail,
 			action,
 			errorMessage,
 		});
+		// provider_not_configured / no_admin_account are permanent for this
+		// run — retrying won't change them. A transport failure might, so
+		// throw to let Trigger.dev's retry policy actually kick in.
+		if (!result.ok && result.reason === "send_failed") {
+			throw new Error(result.error);
+		}
+		return result;
 	},
 });
