@@ -88,8 +88,9 @@ export const manageAllowlistEntryTask = task({
 			throw missingSessionErr;
 		}
 
-		const browser = await chromium.launch({ headless: true });
+		let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 		try {
+			browser = await chromium.launch({ headless: true });
 			const context = await browser.newContext({
 				storageState: JSON.parse(sessionState),
 			});
@@ -123,7 +124,7 @@ export const manageAllowlistEntryTask = task({
 
 			if (!confirmed) {
 				logger.error(
-					{ email, action, scrapedEmails: emails },
+					{ email, action, scrapedEmailCount: emails.length },
 					"Allowlist re-scrape did not confirm the mutation",
 				);
 				throw new AllowlistAutomationError(
@@ -147,7 +148,7 @@ export const manageAllowlistEntryTask = task({
 			await alertAdmin(email, action, err);
 			throw err;
 		} finally {
-			await browser.close();
+			await browser?.close();
 		}
 	},
 });

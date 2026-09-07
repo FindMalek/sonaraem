@@ -113,6 +113,10 @@ export async function tryAcquireSlot(
 	email: string,
 ): Promise<AcquireSlotResult> {
 	return await db.transaction(async (tx) => {
+		// Locked so two concurrent callers for the same request can't both
+		// read "waiting" and each win a different slot for it — the second
+		// blocks here until the first commits, then re-reads as "active" (or
+		// whatever it became) and correctly refuses.
 		const [request] = await tx
 			.select({
 				id: spotifyAllowlistQueueRequest.id,
@@ -121,7 +125,8 @@ export async function tryAcquireSlot(
 				priority: spotifyAllowlistQueueRequest.priority,
 			})
 			.from(spotifyAllowlistQueueRequest)
-			.where(eq(spotifyAllowlistQueueRequest.id, requestId));
+			.where(eq(spotifyAllowlistQueueRequest.id, requestId))
+			.for("update");
 
 		if (request?.status !== "waiting") {
 			return { acquired: false, reason: "not-your-turn" as const };
