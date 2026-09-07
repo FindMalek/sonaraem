@@ -28,6 +28,13 @@ export async function addAllowlistUser(
 	// If it's still open at the timeout, submission was rejected (validation,
 	// cap reached, etc.) rather than merely slow.
 	await page.locator("#email").waitFor({ state: "hidden", timeout: 15_000 });
+	// The table refetches after the dialog closes and can render empty mid-flight —
+	// wait for the row itself so callers never re-scrape into that gap.
+	await page
+		.locator(`${TABLE_SELECTOR} tbody tr`)
+		.filter({ hasText: email })
+		.first()
+		.waitFor({ state: "visible", timeout: 15_000 });
 }
 
 export async function removeAllowlistUser(

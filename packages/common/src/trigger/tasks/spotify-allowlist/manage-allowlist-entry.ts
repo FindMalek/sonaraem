@@ -109,16 +109,25 @@ export const manageAllowlistEntryTask = task({
 				);
 			}
 
-			await waitForWriteGap();
+			const existingEmails = await scrapeAllowlistEmails(page);
+			const alreadyPresent = existingEmails.includes(email.toLowerCase());
+			// A retry can land after a prior run's mutation actually succeeded but
+			// its confirmation didn't (see the re-scrape race below) — skip the DOM
+			// action entirely when the dashboard is already in the desired state.
+			const alreadyDone = action === "add" ? alreadyPresent : !alreadyPresent;
 
-			if (action === "add") {
-				await addAllowlistUser(page, email);
-			} else {
-				await removeAllowlistUser(page, email);
+			let emails = existingEmails;
+			if (!alreadyDone) {
+				await waitForWriteGap();
+				if (action === "add") {
+					await addAllowlistUser(page, email);
+				} else {
+					await removeAllowlistUser(page, email);
+				}
+				await recordAllowlistWriteNow();
+				emails = await scrapeAllowlistEmails(page);
 			}
-			await recordAllowlistWriteNow();
 
-			const emails = await scrapeAllowlistEmails(page);
 			const present = emails.includes(email.toLowerCase());
 			const confirmed = action === "add" ? present : !present;
 
