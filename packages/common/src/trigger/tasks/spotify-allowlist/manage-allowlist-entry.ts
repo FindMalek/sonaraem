@@ -1,5 +1,6 @@
 import { env } from "@sonaraem/env/server";
 import { logger } from "@sonaraem/logger";
+import type { Queue } from "@trigger.dev/sdk";
 import { queue, task, wait } from "@trigger.dev/sdk";
 import { chromium } from "playwright";
 
@@ -17,7 +18,7 @@ import {
 } from "../../../services/spotify-allowlist/dashboard-automation";
 import { sendAllowlistAutomationFailedEmailTask } from "../emails/send-allowlist-automation-failed";
 
-const USERS_URL = () =>
+export const USERS_URL = () =>
 	`https://developer.spotify.com/dashboard/${env.SONARAEM_SPOTIFY_CLIENT_ID}/users`;
 
 // No login automation yet (needs Spotify's login/OTP DOM) — a session must already exist.
@@ -27,7 +28,8 @@ export class AllowlistAutomationError extends Error {}
 // concurrency: 1 is required correctness, not just tidiness. Two browsers
 // sharing the same storageState would race on the session save and could
 // look like two simultaneous logins to Spotify.
-const allowlistAutomationQueue = queue({
+// Exported so the reconcile sweep in reclaim-allowlist-slots.ts shares it.
+export const allowlistAutomationQueue: Queue = queue({
 	name: "spotify-allowlist-manage-entry",
 	concurrencyLimit: 1,
 });
@@ -36,7 +38,8 @@ const allowlistAutomationQueue = queue({
 // last confirmed dashboard mutation — the whole anti-detection guarantee now
 // that automation is serialized above. Slots themselves free up instantly on
 // release; this is the only throttle.
-async function waitForWriteGap(): Promise<void> {
+// Exported so the reconcile sweep, which makes real mutations too, respects it.
+export async function waitForWriteGap(): Promise<void> {
 	const lastWriteAt = await getLastAllowlistWriteAt();
 	if (!lastWriteAt) return;
 
