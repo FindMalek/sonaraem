@@ -70,8 +70,7 @@ export const adminUsersRouter = {
 				return { success: false };
 			}
 
-			// The one admin account (user_single_admin_idx) — deleting it from
-			// here would lock the team out of /admin with no in-app recovery.
+			// The one admin account (user_single_admin_idx) — no in-app recovery if deleted.
 			if (target.role === "admin") {
 				throw new ORPCError("BAD_REQUEST", {
 					message: "Cannot delete the admin account.",
