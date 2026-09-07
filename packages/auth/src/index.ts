@@ -10,7 +10,9 @@ import {
 } from "@sonaraem/common/services/waitlist";
 import { sendWelcomeEmailTask } from "@sonaraem/common/trigger/tasks/emails/send-welcome";
 import { buildTrustedOrigins } from "@sonaraem/common/utils/origin";
+import { db } from "@sonaraem/db";
 import * as schema from "@sonaraem/db/schema/auth";
+import { spotifyAllowlistSlot } from "@sonaraem/db/schema/spotify-allowlist";
 import { logger } from "@sonaraem/logger";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -21,20 +23,7 @@ import {
 } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins";
-
-// Short-lived — only needs to survive the Spotify OAuth round trip.
-const LOGIN_SLOT_COOKIE = "sonaraem_login_slot";
-const LOGIN_SLOT_COOKIE_MAX_AGE_SECONDS = 5 * 60;
-
-// Minimal shape releaseLoginSlotIfHeld needs — databaseHooks' `after` context isn't exported as a standalone type.
-type CookieContext = {
-	getCookie: (name: string) => string | null;
-	setCookie: (
-		name: string,
-		value: string,
-		attributes?: Record<string, unknown>,
-	) => void;
-} | null;
+import { and, eq } from "drizzle-orm";
 
 export type AuthVariant = "dashboard" | "admin";
 
@@ -163,24 +152,32 @@ async function resolveLoginIdentity(
 	return null;
 }
 
-// Releases the slot the before-hook acquired (via its cookie) now that sign-in has completed; clears the cookie either way.
-async function releaseLoginSlotIfHeld(context: CookieContext): Promise<void> {
-	if (!context) return;
-	const slotIdRaw = context.getCookie(LOGIN_SLOT_COOKIE);
-	if (!slotIdRaw) return;
+// Only one `login`-kind slot ever exists, so whichever one is occupied when
+// a Spotify account just finished linking can only be the one this login
+// used — no cookie needed to identify it, which sidesteps that cookie having
+// to survive a round trip through Spotify's own domain and back.
+async function releaseOccupiedLoginSlot(): Promise<void> {
+	const [slot] = await db
+		.select({ id: spotifyAllowlistSlot.id })
+		.from(spotifyAllowlistSlot)
+		.where(
+			and(
+				eq(spotifyAllowlistSlot.kind, "login"),
+				eq(spotifyAllowlistSlot.status, "occupied"),
+			),
+		);
+	if (!slot) return;
 
-	const slotId = Number(slotIdRaw);
 	try {
-		if (Number.isFinite(slotId)) {
-			await releaseLoginSlot(slotId);
-		}
+		await releaseLoginSlot(slot.id);
 	} catch (err) {
 		logger.error(
-			{ slotId, error: err instanceof Error ? err.message : String(err) },
+			{
+				slotId: slot.id,
+				error: err instanceof Error ? err.message : String(err),
+			},
 			"Failed to release the Spotify allowlist login slot after sign-in",
 		);
-	} finally {
-		context.setCookie(LOGIN_SLOT_COOKIE, "", { maxAge: 0, path: "/" });
 	}
 }
 
@@ -246,22 +243,22 @@ export function createDashboardAuth(
 					// just landed: clear any stale "needs reauth" state (#289) and
 					// check whether this account's email matches an approved,
 					// unredeemed waitlist entry (#298).
-					after: async (createdAccount, context) => {
+					after: async (createdAccount) => {
 						if (createdAccount.providerId !== "spotify") return;
 						await Promise.all([
 							clearReauthFlagIfNeeded(createdAccount.userId),
 							autoApproveIfWaitlisted(createdAccount.userId),
-							releaseLoginSlotIfHeld(context),
+							releaseOccupiedLoginSlot(),
 						]);
 					},
 				},
 				update: {
-					after: async (updatedAccount, context) => {
+					after: async (updatedAccount) => {
 						if (updatedAccount.providerId !== "spotify") return;
 						await Promise.all([
 							clearReauthFlagIfNeeded(updatedAccount.userId),
 							autoApproveIfWaitlisted(updatedAccount.userId),
-							releaseLoginSlotIfHeld(context),
+							releaseOccupiedLoginSlot(),
 						]);
 					},
 				},
@@ -282,17 +279,7 @@ export function createDashboardAuth(
 				if (!resolved) return;
 
 				try {
-					const { slotId } = await acquireLoginSlot(
-						resolved.identity,
-						resolved.email,
-					);
-					ctx.setCookie(LOGIN_SLOT_COOKIE, String(slotId), {
-						httpOnly: true,
-						secure: !!envConfig.VERCEL,
-						sameSite: "lax",
-						maxAge: LOGIN_SLOT_COOKIE_MAX_AGE_SECONDS,
-						path: "/",
-					});
+					await acquireLoginSlot(resolved.identity, resolved.email);
 				} catch (err) {
 					logger.error(
 						{
