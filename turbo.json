@@ -76,7 +76,7 @@
 		"email#build": {
 			"dependsOn": ["^build"],
 			"inputs": ["$TURBO_DEFAULT$", ".env*"],
-			"outputs": [".react-email/.next/**"]
+			"cache": false
 		},
 		"lint": {
 			"dependsOn": ["^lint"]
