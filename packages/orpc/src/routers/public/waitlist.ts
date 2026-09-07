@@ -32,7 +32,10 @@ export const waitlistRouter = {
 			}
 
 			const email = input.email.toLowerCase().trim();
-			const spotifyEmail = input.spotifyEmail.toLowerCase().trim();
+			// Defaults to the same email — see the schema's doc comment.
+			const spotifyEmail = (input.spotifyEmail ?? input.email)
+				.toLowerCase()
+				.trim();
 			const [inserted] = await db
 				.insert(waitlistSignup)
 				.values({ email, spotifyEmail })

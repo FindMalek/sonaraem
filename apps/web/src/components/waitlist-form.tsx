@@ -3,6 +3,9 @@
 import { waitlistSignupInput } from "@sonaraem/common/schemas";
 import {
 	Button,
+	Checkbox,
+	Collapsible,
+	CollapsibleContent,
 	Field,
 	FieldDescription,
 	FieldError,
@@ -21,6 +24,10 @@ import { orpc } from "@/utils/orpc";
 
 export function WaitlistForm() {
 	const [submitted, setSubmitted] = useState(false);
+	// Checked by default — most people's Spotify account uses the same email
+	// they'd sign up with. Same pattern as "billing address same as shipping":
+	// unchecking reveals a second field instead of showing both up front.
+	const [sameEmail, setSameEmail] = useState(true);
 
 	const signup = useMutation(
 		orpc.waitlist.signup.mutationOptions({
@@ -34,7 +41,14 @@ export function WaitlistForm() {
 	const form = useForm({
 		defaultValues: { email: "", spotifyEmail: "", website: "" },
 		validators: {
-			onSubmit: waitlistSignupInput.extend({ website: z.string() }),
+			// spotifyEmail is optional on the shared API schema (the backend
+			// defaults it to `email`), but this form always keeps a real value
+			// in it (synced while "same as above" is checked) — re-require it
+			// here so the field's own validity state stays meaningful.
+			onSubmit: waitlistSignupInput.extend({
+				spotifyEmail: z.string().trim().email(),
+				website: z.string(),
+			}),
 		},
 		onSubmit: async ({ value }) => {
 			await signup.mutateAsync(value);
@@ -72,7 +86,16 @@ export function WaitlistForm() {
 									placeholder="you@example.com"
 									value={field.state.value}
 									onBlur={field.handleBlur}
-									onChange={(e) => field.handleChange(e.target.value)}
+									onChange={(e) => {
+										field.handleChange(e.target.value);
+										// Keep the hidden spotifyEmail field in sync so it's
+										// still a valid submission while the second input is
+										// collapsed — the checkbox is the single source of
+										// truth for "are these the same".
+										if (sameEmail) {
+											form.setFieldValue("spotifyEmail", e.target.value);
+										}
+									}}
 									aria-invalid={isInvalid}
 								/>
 								{isInvalid && <FieldError errors={field.state.meta.errors} />}
@@ -81,35 +104,58 @@ export function WaitlistForm() {
 					}}
 				/>
 
-				<form.Field
-					name="spotifyEmail"
-					children={(field) => {
-						const isInvalid =
-							field.state.meta.isTouched && !field.state.meta.isValid;
-						return (
-							<Field data-invalid={isInvalid}>
-								<FieldLabel htmlFor={field.name}>
-									Spotify account email
-								</FieldLabel>
-								<Input
-									id={field.name}
-									name={field.name}
-									type="email"
-									placeholder="spotify@example.com"
-									value={field.state.value}
-									onBlur={field.handleBlur}
-									onChange={(e) => field.handleChange(e.target.value)}
-									aria-invalid={isInvalid}
-								/>
-								<FieldDescription>
-									May differ from the email above — Spotify accounts via Google,
-									Apple, or Facebook commonly use a different one.
-								</FieldDescription>
-								{isInvalid && <FieldError errors={field.state.meta.errors} />}
-							</Field>
-						);
-					}}
-				/>
+				<div className="flex items-center gap-2">
+					<Checkbox
+						id="same-email"
+						checked={sameEmail}
+						onCheckedChange={(checked) => {
+							const isSame = !!checked;
+							setSameEmail(isSame);
+							if (isSame) {
+								form.setFieldValue("spotifyEmail", form.getFieldValue("email"));
+							}
+						}}
+					/>
+					<label htmlFor="same-email" className="text-muted-foreground text-sm">
+						This is also my Spotify account email
+					</label>
+				</div>
+
+				<Collapsible open={!sameEmail}>
+					<CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+						<form.Field
+							name="spotifyEmail"
+							children={(field) => {
+								const isInvalid =
+									field.state.meta.isTouched && !field.state.meta.isValid;
+								return (
+									<Field data-invalid={isInvalid} className="pt-4">
+										<FieldLabel htmlFor={field.name}>
+											Spotify account email
+										</FieldLabel>
+										<Input
+											id={field.name}
+											name={field.name}
+											type="email"
+											placeholder="spotify@example.com"
+											value={field.state.value}
+											onBlur={field.handleBlur}
+											onChange={(e) => field.handleChange(e.target.value)}
+											aria-invalid={isInvalid}
+										/>
+										<FieldDescription>
+											Spotify accounts via Google, Apple, or Facebook commonly
+											use a different email than the one above.
+										</FieldDescription>
+										{isInvalid && (
+											<FieldError errors={field.state.meta.errors} />
+										)}
+									</Field>
+								);
+							}}
+						/>
+					</CollapsibleContent>
+				</Collapsible>
 
 				<form.Field name="website">
 					{(field) => (

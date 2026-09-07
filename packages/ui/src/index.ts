@@ -60,6 +60,11 @@ export {
 	ChartTooltipContent,
 } from "./components/ui/chart";
 export { Checkbox } from "./components/ui/checkbox";
+export {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "./components/ui/collapsible";
 export * from "./components/ui/drawer";
 export {
 	DropdownMenu,
