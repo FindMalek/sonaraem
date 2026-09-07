@@ -35,7 +35,9 @@ export const waitlistRouter = {
 			}
 
 			const email = input.email.toLowerCase().trim();
-			const spotifyEmail = input.spotifyEmail.toLowerCase().trim();
+			const spotifyEmail = (input.spotifyEmail ?? input.email)
+				.toLowerCase()
+				.trim();
 			const [inserted] = await db
 				.insert(waitlistSignup)
 				.values({ email, spotifyEmail })
