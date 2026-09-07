@@ -4,7 +4,20 @@ import type {
 	WaitlistAdminItem,
 	WaitlistStatus,
 } from "@sonaraem/common/schemas";
-import { Badge, Button, Checkbox, Icons } from "@sonaraem/ui";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+	Badge,
+	Button,
+	Checkbox,
+	Icons,
+} from "@sonaraem/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { format } from "date-fns";
@@ -65,6 +78,9 @@ export function AdminWaitlistContent() {
 	);
 	const [isSheetOpen, setIsSheetOpen] = useState(false);
 	const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+	const [deleteTarget, setDeleteTarget] = useState<WaitlistAdminItem | null>(
+		null,
+	);
 
 	const { data, isFetching } = useQuery(
 		orpc.admin.waitlist.list.queryOptions({
@@ -119,6 +135,16 @@ export function AdminWaitlistContent() {
 	const { mutate: resendInvite, isPending: isResending } = useMutation(
 		orpc.admin.waitlist.resendInvite.mutationOptions({
 			onSuccess: () => invalidateWaitlist(),
+			onError: toastError,
+		}),
+	);
+
+	const { mutate: deleteEntry, isPending: isDeleting } = useMutation(
+		orpc.admin.waitlist.delete.mutationOptions({
+			onSuccess: () => {
+				invalidateWaitlist();
+				setDeleteTarget(null);
+			},
 			onError: toastError,
 		}),
 	);
@@ -248,6 +274,11 @@ export function AdminWaitlistContent() {
 									},
 								]
 							: []),
+						{
+							label: "Delete",
+							onClick: () => setDeleteTarget(row.original),
+							variant: "destructive" as const,
+						},
 					]}
 				/>
 			),
@@ -326,6 +357,33 @@ export function AdminWaitlistContent() {
 				onSaveNote={handleSaveNote}
 				isActionLoading={isActionLoading || isResending}
 			/>
+
+			<AlertDialog
+				open={deleteTarget !== null}
+				onOpenChange={(open) => !open && setDeleteTarget(null)}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Delete this waitlist entry?</AlertDialogTitle>
+						<AlertDialogDescription>
+							This permanently removes {deleteTarget?.email} from the waitlist,
+							including its invite history. This cannot be undone.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							variant="destructive"
+							isLoading={isDeleting}
+							onClick={() =>
+								deleteTarget && deleteEntry({ id: deleteTarget.id })
+							}
+						>
+							{isDeleting ? "Deleting..." : "Delete"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</div>
 	);
 }
