@@ -332,7 +332,8 @@ export function createDashboardAuth(
 						},
 					}
 				: {},
-		plugins: [nextCookies(), admin({ defaultRole: "user" })],
+		// nextCookies must be last — it flushes the cookie jar into real Set-Cookie headers, so anything after it silently loses its cookie writes.
+		plugins: [admin({ defaultRole: "user" }), nextCookies()],
 	});
 }
 
@@ -360,7 +361,8 @@ export function createAdminAuth(
 			disableSignUp: true,
 		},
 		socialProviders: {},
-		plugins: [nextCookies(), admin({ defaultRole: "user" })],
+		// nextCookies must be last — it flushes the cookie jar into real Set-Cookie headers, so anything after it silently loses its cookie writes.
+		plugins: [admin({ defaultRole: "user" }), nextCookies()],
 	});
 }
 
