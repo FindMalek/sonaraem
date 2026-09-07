@@ -67,7 +67,8 @@ function Button({
 			{...props}
 		>
 			{isLoading && <Spinner className="shrink-0 animate-spin" />}
-			{children}
+			{/* Slottable marks the real child so asChild can still clone onto it with the spinner as a sibling. */}
+			<Slot.Slottable>{children}</Slot.Slottable>
 		</Comp>
 	);
 }

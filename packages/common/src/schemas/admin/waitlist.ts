@@ -62,3 +62,8 @@ export const waitlistAdminResendInviteInput = z.object({
 export type WaitlistAdminResendInviteInput = z.infer<
 	typeof waitlistAdminResendInviteInput
 >;
+
+export const waitlistAdminDeleteInput = z.object({
+	id: z.number().int(),
+});
+export type WaitlistAdminDeleteInput = z.infer<typeof waitlistAdminDeleteInput>;
