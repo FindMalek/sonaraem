@@ -21,6 +21,7 @@ const { dbMock, resultsQueue, queueMock, runsMock, manageAllowlistEntryMock } =
 				tryAcquireSlot: vi.fn(),
 				releaseSlot: vi.fn().mockResolvedValue(undefined),
 				failActiveRequestForSlot: vi.fn().mockResolvedValue(undefined),
+				settleWaitingRequest: vi.fn().mockResolvedValue(undefined),
 			},
 			runsMock: { poll: vi.fn() },
 			manageAllowlistEntryMock: { trigger: vi.fn() },
@@ -133,6 +134,11 @@ describe("acquireLoginSlot", () => {
 		).rejects.toThrow(LoginSlotError);
 
 		expect(manageAllowlistEntryMock.trigger).not.toHaveBeenCalled();
+		expect(queueMock.settleWaitingRequest).toHaveBeenCalledWith(
+			1,
+			"failed",
+			expect.any(String),
+		);
 	});
 });
 

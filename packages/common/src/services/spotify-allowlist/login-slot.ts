@@ -14,6 +14,7 @@ import {
 	enqueue,
 	failActiveRequestForSlot,
 	releaseSlot,
+	settleWaitingRequest,
 	tryAcquireSlot,
 } from "./queue";
 
@@ -66,7 +67,9 @@ export async function acquireLoginSlot(
 	}
 
 	if (slotId === null) {
-		throw new LoginSlotError("Timed out waiting for a free login slot");
+		const message = "Timed out waiting for a free login slot";
+		await settleWaitingRequest(requestId, "failed", message);
+		throw new LoginSlotError(message);
 	}
 
 	try {

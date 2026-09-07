@@ -41,10 +41,16 @@ function poolForPriority(priority: AllowlistPriority): AllowlistSlotKind {
 	return priority === "login" ? "login" : "rotation";
 }
 
+// Drizzle wraps the real pg error in `.cause` — check both, same as setup.ts's isAdminRaceConflict.
 function isUniqueConstraintConflict(err: unknown, constraint: string): boolean {
-	if (typeof err !== "object" || err === null) return false;
-	if (!("code" in err) || !("constraint" in err)) return false;
-	return err.code === "23505" && err.constraint === constraint;
+	const asRecord = (v: unknown) =>
+		typeof v === "object" && v !== null
+			? (v as { code?: string; constraint?: string; cause?: unknown })
+			: undefined;
+	const isViolation = (r?: { code?: string; constraint?: string }) =>
+		r?.code === "23505" && r?.constraint === constraint;
+	const direct = asRecord(err);
+	return isViolation(direct) || isViolation(asRecord(direct?.cause));
 }
 
 // Idempotent per identity — returns the existing live request instead of erroring on a conflict.

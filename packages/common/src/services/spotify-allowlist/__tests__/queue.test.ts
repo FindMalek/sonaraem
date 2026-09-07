@@ -80,6 +80,20 @@ describe("queue", () => {
 			expect(result).toEqual({ requestId: 7, alreadyQueued: true });
 		});
 
+		it("returns the existing live request when the pg error is wrapped in .cause", async () => {
+			const pgError = Object.assign(new Error("duplicate"), {
+				code: "23505",
+				constraint: "spotify_allowlist_queue_request_one_live_per_user",
+			});
+			const wrapped = Object.assign(new Error("Failed query: insert..."), {
+				cause: pgError,
+			});
+			push(wrapped); // insert throws, drizzle-wrapped
+			push([{ id: 8 }]); // select existing live request
+			const result = await enqueue({ userId: "u1" }, "cron");
+			expect(result).toEqual({ requestId: 8, alreadyQueued: true });
+		});
+
 		it("re-throws errors that aren't the expected unique-constraint conflict", async () => {
 			push(new Error("connection lost"));
 			await expect(enqueue({ userId: "u1" }, "manual")).rejects.toThrow(
