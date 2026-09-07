@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import {
 	waitlistAdminBulkIdsInput,
+	waitlistAdminDeleteInput,
 	waitlistAdminListInput,
 	waitlistAdminListOutputSchema,
 	waitlistAdminResendInviteInput,
@@ -303,5 +304,17 @@ export const adminWaitlistRouter = {
 				.returning({ id: waitlistSignup.id });
 
 			return { rejected: updated.length };
+		}),
+
+	delete: adminProcedure
+		.input(waitlistAdminDeleteInput)
+		.output(z.object({ success: z.boolean() }))
+		.handler(async ({ input }) => {
+			const deleted = await db
+				.delete(waitlistSignup)
+				.where(eq(waitlistSignup.id, input.id))
+				.returning({ id: waitlistSignup.id });
+
+			return { success: deleted.length > 0 };
 		}),
 };

@@ -3,6 +3,9 @@
 import { waitlistSignupInput } from "@sonaraem/common/schemas";
 import {
 	Button,
+	Checkbox,
+	Collapsible,
+	CollapsibleContent,
 	Field,
 	FieldDescription,
 	FieldError,
@@ -10,6 +13,7 @@ import {
 	FieldLabel,
 	Icons,
 	Input,
+	Label,
 } from "@sonaraem/ui";
 import { useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
@@ -32,12 +36,22 @@ export function WaitlistForm() {
 	);
 
 	const form = useForm({
-		defaultValues: { email: "", spotifyEmail: "", website: "" },
+		defaultValues: {
+			email: "",
+			spotifyEmail: "",
+			website: "",
+			sameEmail: true,
+		},
 		validators: {
-			onSubmit: waitlistSignupInput.extend({ website: z.string() }),
+			onSubmit: waitlistSignupInput.extend({
+				spotifyEmail: z.string().trim().email(),
+				website: z.string(),
+				sameEmail: z.boolean(),
+			}),
 		},
 		onSubmit: async ({ value }) => {
-			await signup.mutateAsync(value);
+			const { sameEmail, ...payload } = value;
+			await signup.mutateAsync(payload);
 		},
 	});
 
@@ -72,7 +86,12 @@ export function WaitlistForm() {
 									placeholder="you@example.com"
 									value={field.state.value}
 									onBlur={field.handleBlur}
-									onChange={(e) => field.handleChange(e.target.value)}
+									onChange={(e) => {
+										field.handleChange(e.target.value);
+										if (form.getFieldValue("sameEmail")) {
+											form.setFieldValue("spotifyEmail", e.target.value);
+										}
+									}}
 									aria-invalid={isInvalid}
 								/>
 								{isInvalid && <FieldError errors={field.state.meta.errors} />}
@@ -82,34 +101,72 @@ export function WaitlistForm() {
 				/>
 
 				<form.Field
-					name="spotifyEmail"
-					children={(field) => {
-						const isInvalid =
-							field.state.meta.isTouched && !field.state.meta.isValid;
-						return (
-							<Field data-invalid={isInvalid}>
-								<FieldLabel htmlFor={field.name}>
-									Spotify account email
-								</FieldLabel>
-								<Input
-									id={field.name}
-									name={field.name}
-									type="email"
-									placeholder="spotify@example.com"
-									value={field.state.value}
-									onBlur={field.handleBlur}
-									onChange={(e) => field.handleChange(e.target.value)}
-									aria-invalid={isInvalid}
-								/>
-								<FieldDescription>
-									May differ from the email above — Spotify accounts via Google,
-									Apple, or Facebook commonly use a different one.
-								</FieldDescription>
-								{isInvalid && <FieldError errors={field.state.meta.errors} />}
-							</Field>
-						);
-					}}
+					name="sameEmail"
+					children={(field) => (
+						<div className="flex items-center gap-2">
+							<Checkbox
+								id={field.name}
+								checked={field.state.value}
+								onCheckedChange={(checked) => {
+									const isSame = !!checked;
+									field.handleChange(isSame);
+									if (isSame) {
+										form.setFieldValue(
+											"spotifyEmail",
+											form.getFieldValue("email"),
+										);
+									}
+								}}
+							/>
+							<Label
+								htmlFor={field.name}
+								className="text-muted-foreground text-sm"
+							>
+								This is also my Spotify account email
+							</Label>
+						</div>
+					)}
 				/>
+
+				<form.Subscribe selector={(state) => state.values.sameEmail}>
+					{(sameEmail) => (
+						<Collapsible open={!sameEmail}>
+							<CollapsibleContent className="overflow-hidden data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+								<form.Field
+									name="spotifyEmail"
+									children={(field) => {
+										const isInvalid =
+											field.state.meta.isTouched && !field.state.meta.isValid;
+										return (
+											<Field data-invalid={isInvalid} className="pt-4">
+												<FieldLabel htmlFor={field.name}>
+													Spotify account email
+												</FieldLabel>
+												<Input
+													id={field.name}
+													name={field.name}
+													type="email"
+													placeholder="spotify@example.com"
+													value={field.state.value}
+													onBlur={field.handleBlur}
+													onChange={(e) => field.handleChange(e.target.value)}
+													aria-invalid={isInvalid}
+												/>
+												<FieldDescription>
+													Spotify accounts via Google, Apple, or Facebook
+													commonly use a different email than the one above.
+												</FieldDescription>
+												{isInvalid && (
+													<FieldError errors={field.state.meta.errors} />
+												)}
+											</Field>
+										);
+									}}
+								/>
+							</CollapsibleContent>
+						</Collapsible>
+					)}
+				</form.Subscribe>
 
 				<form.Field name="website">
 					{(field) => (

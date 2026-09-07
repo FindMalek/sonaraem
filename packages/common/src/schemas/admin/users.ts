@@ -27,3 +27,8 @@ export const adminUserListOutputSchema = z.object({
 	pageCount: z.number().int().min(0),
 });
 export type AdminUserListOutput = z.infer<typeof adminUserListOutputSchema>;
+
+export const adminUserDeleteInput = z.object({
+	id: z.string(),
+});
+export type AdminUserDeleteInput = z.infer<typeof adminUserDeleteInput>;
