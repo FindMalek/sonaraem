@@ -154,6 +154,8 @@ if (!row || row.banned || !row.isApproved) {
 
 ## No Comments Rule
 
+CI-enforced: `scripts/check-comment-blocks.mjs` fails a PR that adds 2+ consecutive `//` lines (see the `lint` job in `.github/workflows/ci.yml`). Scoped to the diff, not the whole repo — existing violations are pending cleanup, not exempt from the rule.
+
 Default to no comment. Add one only when the WHY is genuinely non-obvious from
 the code itself: a hidden constraint, a workaround for a specific bug,
 behavior that would surprise a reader. Never comment WHAT the code does —

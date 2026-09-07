@@ -1,13 +1,54 @@
 import { DASHBOARD_ROUTES } from "@sonaraem/common/utils/routes";
-import { SonaraemBrandHeader } from "@sonaraem/ui";
+import {
+	Alert,
+	AlertDescription,
+	AlertTitle,
+	Icons,
+	SonaraemBrandHeader,
+} from "@sonaraem/ui";
 import type { Route } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AuthSpotifySignInButton } from "@/components/app/auth-spotify-sign-in-button";
+import { serverClient } from "@/shared/api/orpc-server";
 import { getServerSession } from "@/shared/api/session.server";
 
-export default async function LoginPage() {
+const INVITE_TOKEN_REGEX = /^[0-9a-f]{64}$/;
+
+function firstValue(value: string | string[] | undefined): string | undefined {
+	return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function LoginPage({
+	searchParams,
+}: {
+	searchParams: Promise<{
+		error?: string | string[];
+		error_description?: string | string[];
+	}>;
+}) {
 	const session = await getServerSession();
+	const rawSearchParams = await searchParams;
+	const error = firstValue(rawSearchParams.error);
+	const errorDescription = firstValue(rawSearchParams.error_description);
+
+	// No notification system yet — log for admin follow-up instead of failing silently.
+	if (error) {
+		const cookieStore = await cookies();
+		const inviteToken = cookieStore.get("sonaraem_invite")?.value;
+		await serverClient.waitlist
+			.logSpotifyAuthFailure({
+				inviteToken:
+					inviteToken && INVITE_TOKEN_REGEX.test(inviteToken)
+						? inviteToken
+						: undefined,
+				error,
+				errorDescription,
+			})
+			.catch(() => {
+				// Logging is best-effort — never block the user on it.
+			});
+	}
 
 	if (session?.user) {
 		if (!session.user.isApproved) {
@@ -56,6 +97,17 @@ export default async function LoginPage() {
 								intelligent playlists based on your music taste.
 							</p>
 						</div>
+
+						{error && (
+							<Alert variant="warning">
+								<Icons.alertTriangle />
+								<AlertTitle>We hit a snag connecting Spotify</AlertTitle>
+								<AlertDescription>
+									This is on us, not you — we've logged what happened and we'll
+									take a look. Give it a few minutes and try again.
+								</AlertDescription>
+							</Alert>
+						)}
 
 						<AuthSpotifySignInButton />
 

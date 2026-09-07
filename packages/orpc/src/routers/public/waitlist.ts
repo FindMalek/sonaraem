@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
 import {
+	spotifyAuthFailureInput,
+	spotifyAuthFailureOutputSchema,
 	waitlistSignupInput,
 	waitlistSignupOutputSchema,
 	waitlistStatusInput,
@@ -124,5 +127,43 @@ export const waitlistRouter = {
 				status: row.status,
 				queuePosition: (aheadRows[0]?.ahead ?? 0) + 1,
 			};
+		}),
+
+	// No notification system yet — logs here are the interim signal to grep/alert on.
+	logSpotifyAuthFailure: publicProcedure
+		.meta({
+			openapi: {
+				method: "POST",
+				path: "/waitlist/log-spotify-auth-failure",
+				summary: "Log a failed Spotify sign-in for admin follow-up",
+				tags: ["waitlist"],
+			},
+		})
+		.input(spotifyAuthFailureInput)
+		.output(spotifyAuthFailureOutputSchema)
+		.handler(async ({ input }) => {
+			let email: string | null = null;
+
+			if (input.inviteToken) {
+				const hash = createHash("sha256")
+					.update(input.inviteToken)
+					.digest("hex");
+				const [row] = await db
+					.select({ email: waitlistSignup.email })
+					.from(waitlistSignup)
+					.where(eq(waitlistSignup.inviteToken, hash));
+				email = row?.email ?? null;
+			}
+
+			logger.warn(
+				{
+					email,
+					error: input.error,
+					errorDescription: input.errorDescription,
+				},
+				"Spotify sign-in failed — likely not on the Dev Mode allowlist yet, needs a manual add until #372 automates this",
+			);
+
+			return { logged: true };
 		}),
 };

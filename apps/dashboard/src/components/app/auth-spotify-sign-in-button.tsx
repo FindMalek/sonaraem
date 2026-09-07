@@ -15,6 +15,8 @@ export function AuthSpotifySignInButton() {
 			await authClient.signIn.social({
 				provider: "spotify",
 				callbackURL: `${env.NEXT_PUBLIC_SONARAEM_DASHBOARD_URL}${DASHBOARD_ROUTES.overview.path}`,
+				// Otherwise the default error redirect lands on the bare API domain, no UI.
+				errorCallbackURL: `${env.NEXT_PUBLIC_SONARAEM_DASHBOARD_URL}/login`,
 			});
 		} catch (error) {
 			setIsLoading(false);
