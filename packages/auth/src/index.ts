@@ -22,14 +22,11 @@ import {
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins";
 
-// Short-lived — only needs to survive the Spotify OAuth round trip (redirect
-// out, provider does its thing, redirect back to our callback).
+// Short-lived — only needs to survive the Spotify OAuth round trip.
 const LOGIN_SLOT_COOKIE = "sonaraem_login_slot";
 const LOGIN_SLOT_COOKIE_MAX_AGE_SECONDS = 5 * 60;
 
-// databaseHooks' `after` context isn't exported as a standalone type from
-// better-auth/api — this is the minimal shape releaseLoginSlotIfHeld
-// actually needs from it (structurally satisfied by the real context).
+// Minimal shape releaseLoginSlotIfHeld needs — databaseHooks' `after` context isn't exported as a standalone type.
 type CookieContext = {
 	getCookie: (name: string) => string | null;
 	setCookie: (
@@ -139,16 +136,9 @@ async function clearReauthFlagIfNeeded(accountUserId: string): Promise<void> {
 	}
 }
 
-// Who is this Spotify sign-in for, and which email should be on the real
-// allowlist for it? Two cases: a first-time invite redemption (no account
-// yet — identify by the pre-collected waitlist spotifyEmail) or a returning
-// user reconnecting (an existing session — identify by their account email).
-// Returns null when neither applies, e.g. an organic visitor who was never
-// approved — nothing to gate, Spotify's own check runs as it does today.
+// Identifies who's signing in (invite cookie for a first-timer, session for a reconnect) and which email to gate.
 async function resolveLoginIdentity(
-	// Extracted from getSessionFromCtx's own signature rather than importing
-	// GenericEndpointContext directly — that type isn't re-exported from
-	// better-auth/api as a standalone name.
+	// Parameters<> instead of importing GenericEndpointContext — not exported as a standalone name from better-auth/api.
 	ctx: Parameters<typeof getSessionFromCtx>[0],
 ): Promise<{ identity: AllowlistIdentity; email: string } | null> {
 	const inviteToken = ctx.getCookie("sonaraem_invite");
@@ -173,9 +163,7 @@ async function resolveLoginIdentity(
 	return null;
 }
 
-// Reads the slot acquired by the before-hook (see hooks.before below) off
-// the cookie it set, releases it now that the sign-in has actually
-// completed, and clears the cookie either way.
+// Releases the slot the before-hook acquired (via its cookie) now that sign-in has completed; clears the cookie either way.
 async function releaseLoginSlotIfHeld(context: CookieContext): Promise<void> {
 	if (!context) return;
 	const slotIdRaw = context.getCookie(LOGIN_SLOT_COOKIE);
@@ -280,9 +268,7 @@ export function createDashboardAuth(
 			},
 		},
 		hooks: {
-			// Top-level hooks.before is a single middleware run on every
-			// request (unlike a plugin's hooks, which can register several
-			// {matcher, handler} pairs) — so this checks the path itself.
+			// A single middleware run on every request (unlike a plugin's hooks) — checks the path itself.
 			before: createAuthMiddleware(async (ctx) => {
 				if (
 					ctx.path !== "/sign-in/social" ||
@@ -292,9 +278,7 @@ export function createDashboardAuth(
 				}
 
 				const resolved = await resolveLoginIdentity(ctx);
-				// No resolvable identity (no invite cookie, no session) —
-				// nothing we can proactively gate. Let Spotify's own
-				// allowlist check run as it does today.
+				// No resolvable identity — nothing to gate, Spotify's own check runs as today.
 				if (!resolved) return;
 
 				try {

@@ -46,9 +46,7 @@ export const reclaimAllowlistSlotsTask = schedules.task({
 	id: "spotify-allowlist-reclaim-slots",
 	cron: "*/5 * * * *",
 	run: async () => {
-		// login only ever holds one slot for the span of one interactive
-		// sign-in — a stuck one blocks every other login behind it, so it
-		// gets a much shorter timeout than the background rotation pool.
+		// Only 1 login slot exists, so it gets a much shorter timeout than the rotation pool.
 		const [rotationStuck, loginStuck] = await Promise.all([
 			timeoutReclaim(undefined, "rotation"),
 			timeoutReclaim(LOGIN_OCCUPIED_TIMEOUT_MS, "login"),

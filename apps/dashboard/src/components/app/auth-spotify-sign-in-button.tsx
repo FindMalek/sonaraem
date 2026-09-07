@@ -14,9 +14,7 @@ export function AuthSpotifySignInButton() {
 		setIsLoading(true);
 		setErrorMessage(null);
 		try {
-			// better-auth's client returns { error } rather than throwing for an
-			// API-level failure (e.g. our before-hook rejecting the allowlist
-			// slot acquisition) — a thrown error only covers network failures.
+			// A thrown error only covers network failures — API-level rejections come back as { error }.
 			const result = await authClient.signIn.social({
 				provider: "spotify",
 				callbackURL: `${env.NEXT_PUBLIC_SONARAEM_DASHBOARD_URL}${DASHBOARD_ROUTES.overview.path}`,
@@ -28,8 +26,7 @@ export function AuthSpotifySignInButton() {
 						"We couldn't connect your Spotify account — please try again.",
 				);
 			}
-			// On success the browser is about to navigate away to Spotify —
-			// isLoading intentionally stays true until that happens.
+			// On success isLoading intentionally stays true until the redirect happens.
 		} catch (error) {
 			setIsLoading(false);
 			console.error("Failed to sign in with Spotify", error);
