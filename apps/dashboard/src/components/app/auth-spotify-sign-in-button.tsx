@@ -51,7 +51,9 @@ export function AuthSpotifySignInButton() {
 				{!isLoading && <Icons.chevronRight className="h-4 w-4" />}
 			</Button>
 			{errorMessage && (
-				<p className="text-destructive text-xs">{errorMessage}</p>
+				<p role="alert" className="text-destructive text-xs">
+					{errorMessage}
+				</p>
 			)}
 		</div>
 	);

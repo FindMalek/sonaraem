@@ -13,11 +13,7 @@ export async function scrapeAllowlistEmails(page: Page): Promise<string[]> {
 	return emails;
 }
 
-// "Full Name" and "Email" are always-visible inline form fields, not a
-// dialog that opens on click — "Add user" is just that form's submit button,
-// and it never hides on success, so the new row rendering in the table is
-// the only real confirmation signal.
-// "Full Name" has no visible `required` attribute, but we fill it anyway to be safe — the local part of the email is a fine placeholder.
+// "Full Name" and "Email" are always-visible inline form fields (no dialog), so the table row is the only real confirmation signal.
 export async function addAllowlistUser(
 	page: Page,
 	email: string,
@@ -25,12 +21,17 @@ export async function addAllowlistUser(
 	await page.locator("#name").fill(email.split("@")[0] ?? email);
 	await page.locator("#email").fill(email);
 	await page.locator(`form button[type="submit"]`).click();
-	// The table can render empty mid-refetch right after — wait for the row itself.
-	await page
-		.locator(`${TABLE_SELECTOR} tbody tr`)
-		.filter({ hasText: email })
-		.first()
-		.waitFor({ state: "visible", timeout: 15_000 });
+
+	// Poll the exact-match scrape (not a hasText filter, whose substring match lets "aa@x.com" satisfy a wait for "a@x.com") since the table can render empty mid-refetch right after submit.
+	const target = email.toLowerCase();
+	const deadline = Date.now() + 15_000;
+	while (Date.now() < deadline) {
+		if ((await scrapeAllowlistEmails(page)).includes(target)) return;
+		await page.waitForTimeout(300);
+	}
+	throw new Error(
+		`${email} never appeared in the allowlist table after adding`,
+	);
 }
 
 export async function removeAllowlistUser(

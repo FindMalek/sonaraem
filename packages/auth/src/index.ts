@@ -152,8 +152,16 @@ async function resolveLoginIdentity(
 	return null;
 }
 
-// Only one `login`-kind slot ever exists, so whichever one is occupied is necessarily this login's — no cookie needed.
-async function releaseOccupiedLoginSlot(): Promise<void> {
+// Matched by email, not just "whichever login slot is occupied" — a very
+// late callback from a stalled OAuth flow (past the reclaim timeout) could
+// otherwise release a slot a completely different, newer login now holds.
+async function releaseOccupiedLoginSlot(accountUserId: string): Promise<void> {
+	const [account] = await db
+		.select({ email: schema.user.email })
+		.from(schema.user)
+		.where(eq(schema.user.id, accountUserId));
+	if (!account?.email) return;
+
 	const [slot] = await db
 		.select({ id: spotifyAllowlistSlot.id })
 		.from(spotifyAllowlistSlot)
@@ -161,6 +169,7 @@ async function releaseOccupiedLoginSlot(): Promise<void> {
 			and(
 				eq(spotifyAllowlistSlot.kind, "login"),
 				eq(spotifyAllowlistSlot.status, "occupied"),
+				eq(spotifyAllowlistSlot.email, account.email.toLowerCase()),
 			),
 		);
 	if (!slot) return;
@@ -245,7 +254,7 @@ export function createDashboardAuth(
 						await Promise.all([
 							clearReauthFlagIfNeeded(createdAccount.userId),
 							autoApproveIfWaitlisted(createdAccount.userId),
-							releaseOccupiedLoginSlot(),
+							releaseOccupiedLoginSlot(createdAccount.userId),
 						]);
 					},
 				},
@@ -255,7 +264,7 @@ export function createDashboardAuth(
 						await Promise.all([
 							clearReauthFlagIfNeeded(updatedAccount.userId),
 							autoApproveIfWaitlisted(updatedAccount.userId),
-							releaseOccupiedLoginSlot(),
+							releaseOccupiedLoginSlot(updatedAccount.userId),
 						]);
 					},
 				},
