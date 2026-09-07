@@ -111,9 +111,7 @@ export const manageAllowlistEntryTask = task({
 
 			const existingEmails = await scrapeAllowlistEmails(page);
 			const alreadyPresent = existingEmails.includes(email.toLowerCase());
-			// A retry can land after a prior run's mutation actually succeeded but
-			// its confirmation didn't (see the re-scrape race below) — skip the DOM
-			// action entirely when the dashboard is already in the desired state.
+			// A retry after a confirmation glitch shouldn't redo an already-landed mutation.
 			const alreadyDone = action === "add" ? alreadyPresent : !alreadyPresent;
 
 			let emails = existingEmails;
