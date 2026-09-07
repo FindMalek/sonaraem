@@ -152,9 +152,7 @@ async function resolveLoginIdentity(
 	return null;
 }
 
-// Matched by email, not just "whichever login slot is occupied" — a very
-// late callback from a stalled OAuth flow (past the reclaim timeout) could
-// otherwise release a slot a completely different, newer login now holds.
+// Matched by email, not just "whichever login slot is occupied" — a stalled OAuth flow's late callback could otherwise release a newer login's slot.
 async function releaseOccupiedLoginSlot(accountUserId: string): Promise<void> {
 	const [account] = await db
 		.select({ email: schema.user.email })
