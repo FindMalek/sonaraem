@@ -27,8 +27,8 @@ export class AllowlistAutomationError extends Error {}
 // There is exactly one Playwright session for the one automation account —
 // concurrency: 1 is required correctness, not just tidiness. Two browsers
 // sharing the same storageState would race on the session save and could
-// look like two simultaneous logins to Spotify. Shared with the reconcile
-// sweep in reclaim-allowlist-slots.ts for the same reason.
+// look like two simultaneous logins to Spotify.
+// Exported so the reconcile sweep in reclaim-allowlist-slots.ts shares it.
 export const allowlistAutomationQueue: Queue = queue({
 	name: "spotify-allowlist-manage-entry",
 	concurrencyLimit: 1,
@@ -37,8 +37,8 @@ export const allowlistAutomationQueue: Queue = queue({
 // Blocks until at least DEFAULT_ALLOWLIST_WRITE_GAP_MS has passed since the
 // last confirmed dashboard mutation — the whole anti-detection guarantee now
 // that automation is serialized above. Slots themselves free up instantly on
-// release; this is the only throttle. Shared with the reconcile sweep, which
-// makes real mutations too and must respect the same gap.
+// release; this is the only throttle.
+// Exported so the reconcile sweep, which makes real mutations too, respects it.
 export async function waitForWriteGap(): Promise<void> {
 	const lastWriteAt = await getLastAllowlistWriteAt();
 	if (!lastWriteAt) return;

@@ -59,11 +59,7 @@ async function removeStrandedEntry(email: string): Promise<boolean> {
 	}
 }
 
-// Ground-truth pass: scrapes the real dashboard and removes anything that
-// isn't either a currently-occupied slot or the permanent admin exception.
-// Catches what timeoutReclaim can't — an email that's actually on the
-// dashboard but that our own ledger never marked occupied (e.g. a mutation
-// that landed but whose confirmation glitched before the slot was recorded).
+// Catches what timeoutReclaim can't: an email actually on the dashboard that our own ledger never marked occupied.
 async function reconcileWithDashboard(): Promise<{
 	scraped: number;
 	pruned: string[];
@@ -144,8 +140,7 @@ async function reconcileWithDashboard(): Promise<{
 export const reclaimAllowlistSlotsTask = schedules.task({
 	id: "spotify-allowlist-reclaim-slots",
 	cron: "*/5 * * * *",
-	// Shares the one automation session's queue with manageAllowlistEntryTask
-	// so the reconcile sweep below can never run its own browser alongside it.
+	// Shares manageAllowlistEntryTask's queue so it can't race the reconcile sweep below.
 	queue: allowlistAutomationQueue,
 	run: async () => {
 		const stuck = await timeoutReclaim();
