@@ -76,7 +76,7 @@ describe("withAllowlistSlot", () => {
 		mockAllowlistEntryResult(() => Promise.resolve({ confirmed: true }));
 
 		const work = vi.fn().mockResolvedValue("done");
-		const result = await withAllowlistSlot("u1", 42, work);
+		const result = await withAllowlistSlot("u1", { runId: 42 }, work);
 
 		expect(result).toBe("done");
 		expect(queueMock.enqueue).toHaveBeenCalledWith({ userId: "u1" }, "manual");
@@ -100,9 +100,27 @@ describe("withAllowlistSlot", () => {
 		queueMock.tryAcquireSlot.mockResolvedValue({ acquired: true, slotId: 2 });
 		mockAllowlistEntryResult(() => Promise.resolve({ confirmed: true }));
 
-		await withAllowlistSlot("u2", 43, async () => "ok");
+		await withAllowlistSlot("u2", { runId: 43 }, async () => "ok");
 
 		expect(queueMock.enqueue).toHaveBeenCalledWith({ userId: "u2" }, "cron");
+	});
+
+	it("uses the given priority and skips cancellation checks when there's no runId", async () => {
+		mockDbLookups({ triggeredBy: "user" });
+		queueMock.enqueue.mockResolvedValue({ requestId: 1, alreadyQueued: false });
+		queueMock.tryAcquireSlot.mockResolvedValue({ acquired: true, slotId: 6 });
+		mockAllowlistEntryResult(() => Promise.resolve({ confirmed: true }));
+
+		const result = await withAllowlistSlot(
+			"u10",
+			{ priority: "manual" },
+			async () => "ok",
+		);
+
+		expect(result).toBe("ok");
+		expect(queueMock.enqueue).toHaveBeenCalledWith({ userId: "u10" }, "manual");
+		expect(checkCancelledMock).not.toHaveBeenCalled();
+		expect(queueMock.releaseSlot).toHaveBeenCalledWith(6);
 	});
 
 	it("polls until a slot frees up", async () => {
@@ -114,7 +132,11 @@ describe("withAllowlistSlot", () => {
 			.mockResolvedValueOnce({ acquired: true, slotId: 5 });
 		mockAllowlistEntryResult(() => Promise.resolve({ confirmed: true }));
 
-		const result = await withAllowlistSlot("u3", 1, async () => "ok");
+		const result = await withAllowlistSlot(
+			"u3",
+			{ runId: 1 },
+			async () => "ok",
+		);
 
 		expect(result).toBe("ok");
 		expect(queueMock.tryAcquireSlot).toHaveBeenCalledTimes(3);
@@ -129,7 +151,7 @@ describe("withAllowlistSlot", () => {
 		mockAllowlistEntryResult(() => Promise.resolve({ confirmed: true }));
 
 		await expect(
-			withAllowlistSlot("u4", 1, async () => {
+			withAllowlistSlot("u4", { runId: 1 }, async () => {
 				throw new Error("sync blew up");
 			}),
 		).rejects.toThrow("sync blew up");
@@ -159,7 +181,7 @@ describe("withAllowlistSlot", () => {
 			}); // remove
 
 		await expect(
-			withAllowlistSlot("u4", 1, async () => {
+			withAllowlistSlot("u4", { runId: 1 }, async () => {
 				throw new Error("sync blew up");
 			}),
 		).rejects.toThrow("sync blew up");
@@ -180,7 +202,7 @@ describe("withAllowlistSlot", () => {
 		);
 
 		const work = vi.fn();
-		await expect(withAllowlistSlot("u6", 1, work)).rejects.toThrow(
+		await expect(withAllowlistSlot("u6", { runId: 1 }, work)).rejects.toThrow(
 			"dashboard rejected the add",
 		);
 
@@ -204,7 +226,11 @@ describe("withAllowlistSlot", () => {
 					Promise.reject(new Error("dashboard rejected the remove")),
 			}); // remove
 
-		const result = await withAllowlistSlot("u7", 1, async () => "ok");
+		const result = await withAllowlistSlot(
+			"u7",
+			{ runId: 1 },
+			async () => "ok",
+		);
 
 		expect(result).toBe("ok");
 		expect(queueMock.releaseSlot).not.toHaveBeenCalled();
@@ -231,7 +257,7 @@ describe("withAllowlistSlot", () => {
 		});
 
 		const work = vi.fn();
-		await expect(withAllowlistSlot("u5", 1, work)).rejects.toThrow(
+		await expect(withAllowlistSlot("u5", { runId: 1 }, work)).rejects.toThrow(
 			AllowlistSlotTimeoutError,
 		);
 		expect(work).not.toHaveBeenCalled();
@@ -249,7 +275,7 @@ describe("withAllowlistSlot", () => {
 		checkCancelledMock.mockRejectedValueOnce(new PipelineCancelledError());
 
 		const work = vi.fn();
-		await expect(withAllowlistSlot("u8", 1, work)).rejects.toThrow(
+		await expect(withAllowlistSlot("u8", { runId: 1 }, work)).rejects.toThrow(
 			PipelineCancelledError,
 		);
 
@@ -267,7 +293,7 @@ describe("withAllowlistSlot", () => {
 			.mockRejectedValueOnce(new PipelineCancelledError()); // pre-add check
 
 		const work = vi.fn();
-		await expect(withAllowlistSlot("u9", 1, work)).rejects.toThrow(
+		await expect(withAllowlistSlot("u9", { runId: 1 }, work)).rejects.toThrow(
 			PipelineCancelledError,
 		);
 

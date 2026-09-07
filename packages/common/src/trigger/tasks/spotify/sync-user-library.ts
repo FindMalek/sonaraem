@@ -2,6 +2,7 @@ import { logger } from "@sonaraem/logger";
 import { metadata, task } from "@trigger.dev/sdk";
 
 import { syncLibraryTracks } from "../../../services/music";
+import { withAllowlistSlot } from "../../utils/allowlist-slot";
 
 // On-demand, single-user counterpart to refreshLibrarySnapshotsTask (#284),
 // which refreshes stale users on a cron off Vercel. This task lets the
@@ -13,9 +14,11 @@ import { syncLibraryTracks } from "../../../services/music";
 export const syncUserLibraryTask = task({
 	id: "spotify-sync-user-library",
 	run: async ({ userId }: { userId: string }) => {
-		const result = await syncLibraryTracks(userId, async (progress) => {
-			metadata.set("progress", progress);
-		});
+		const result = await withAllowlistSlot(userId, { priority: "manual" }, () =>
+			syncLibraryTracks(userId, async (progress) => {
+				metadata.set("progress", progress);
+			}),
+		);
 
 		logger.info(
 			{ userId, total: result.total, done: result.done },

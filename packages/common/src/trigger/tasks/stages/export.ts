@@ -22,7 +22,7 @@ export const exportStageTask = task({
 	}) => {
 		await checkCancelled(runId, userId);
 		await updateRun(runId, { currentStage: "export" });
-		const result = await withAllowlistSlot(userId, runId, () =>
+		const result = await withAllowlistSlot(userId, { runId }, () =>
 			autoExportUpdatedPlaylists(userId, playlistIds),
 		);
 		await updateStageProgress(runId, "export", result);

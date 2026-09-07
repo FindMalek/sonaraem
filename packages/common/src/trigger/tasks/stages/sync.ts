@@ -14,7 +14,7 @@ export const syncStageTask = task({
 	run: async ({ userId, runId }: { userId: string; runId: number }) => {
 		await checkCancelled(runId, userId);
 		await updateRun(runId, { currentStage: "sync" });
-		return await withAllowlistSlot(userId, runId, () =>
+		return await withAllowlistSlot(userId, { runId }, () =>
 			syncLibraryTracks(userId, async (p) => {
 				await updateStageProgress(runId, "sync", p);
 			}),

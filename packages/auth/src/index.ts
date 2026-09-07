@@ -152,10 +152,7 @@ async function resolveLoginIdentity(
 	return null;
 }
 
-// Only one `login`-kind slot ever exists, so whichever one is occupied when
-// a Spotify account just finished linking can only be the one this login
-// used — no cookie needed to identify it, which sidesteps that cookie having
-// to survive a round trip through Spotify's own domain and back.
+// Only one `login`-kind slot ever exists, so whichever one is occupied is necessarily this login's — no cookie needed.
 async function releaseOccupiedLoginSlot(): Promise<void> {
 	const [slot] = await db
 		.select({ id: spotifyAllowlistSlot.id })

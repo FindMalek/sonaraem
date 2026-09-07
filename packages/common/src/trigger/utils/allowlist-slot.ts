@@ -51,25 +51,41 @@ async function getUserEmail(userId: string): Promise<string> {
 	return row.email;
 }
 
+// A pipeline stage carries a runId (priority + cancellation come from that
+// run); a standalone caller like onboarding's sync just states its priority
+// directly and has no run to check cancellation against.
+export type AllowlistSlotContext =
+	| { runId: number; priority?: undefined }
+	| { runId?: undefined; priority: "manual" | "cron" };
+
 // Holds a Spotify allowlist slot for `work` — a busy pool is a wait state, not a failure, so this durably polls until one frees up.
 export async function withAllowlistSlot<T>(
 	userId: string,
-	runId: number,
+	context: AllowlistSlotContext,
 	work: () => Promise<T>,
 ): Promise<T> {
-	const priority = await priorityForRun(runId);
+	const priority =
+		context.runId !== undefined
+			? await priorityForRun(context.runId)
+			: context.priority;
 	const { requestId } = await enqueue({ userId }, priority);
 	const email = await getUserEmail(userId);
+
+	// pipeline.cancel only updates pipelineRun.status — Trigger.dev doesn't
+	// re-run checkCancelled on its own when wait.for resumes, so a cancelled
+	// run would otherwise sit here until it timed out instead of stopping.
+	// No-op for a runId-less caller, which has nothing to cancel against.
+	const checkRunCancelled = async () => {
+		if (context.runId !== undefined)
+			await checkCancelled(context.runId, userId);
+	};
 
 	let slotId: number | null = null;
 	const deadline = Date.now() + MAX_WAIT_SECONDS * 1000;
 
 	while (Date.now() < deadline) {
-		// pipeline.cancel only updates pipelineRun.status — Trigger.dev doesn't
-		// re-run checkCancelled on its own when wait.for resumes, so a cancelled
-		// run would otherwise sit here until it timed out instead of stopping.
 		try {
-			await checkCancelled(runId, userId);
+			await checkRunCancelled();
 		} catch (err) {
 			await settleWaitingRequest(requestId, "cancelled");
 			throw err;
@@ -85,7 +101,7 @@ export async function withAllowlistSlot<T>(
 
 	if (slotId === null) {
 		logger.warn(
-			{ userId, runId },
+			{ userId, runId: context.runId },
 			"Timed out waiting for a Spotify allowlist slot",
 		);
 		// Otherwise this request is left `waiting` forever — the partial unique
@@ -101,7 +117,7 @@ export async function withAllowlistSlot<T>(
 	// One more check right before the add — a cancellation landing between
 	// acquiring the slot and here shouldn't still kick off the Spotify stage.
 	try {
-		await checkCancelled(runId, userId);
+		await checkRunCancelled();
 	} catch (err) {
 		await releaseSlot(slotId, { outcome: "cancelled" });
 		throw err;

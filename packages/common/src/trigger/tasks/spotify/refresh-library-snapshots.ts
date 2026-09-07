@@ -7,6 +7,7 @@ import { and, eq, isNull, lt, or } from "drizzle-orm";
 import pLimit from "p-limit";
 
 import { syncLibraryTracks } from "../../../services/music";
+import { withAllowlistSlot } from "../../utils/allowlist-slot";
 
 const REFRESH_CONCURRENCY = 3;
 
@@ -58,7 +59,9 @@ export const refreshLibrarySnapshotsTask = schedules.task({
 			staleUsers.map(({ userId }) =>
 				limit(async () => {
 					try {
-						await syncLibraryTracks(userId);
+						await withAllowlistSlot(userId, { priority: "cron" }, () =>
+							syncLibraryTracks(userId),
+						);
 						refreshed++;
 					} catch (err) {
 						failed++;
