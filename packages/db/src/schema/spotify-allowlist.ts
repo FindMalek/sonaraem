@@ -13,17 +13,31 @@ import { user } from "./auth";
 import { pipelineRun } from "./pipeline-run";
 import { waitlistSignup } from "./waitlist-signup";
 
+// "reclaiming" is a transient state entered only by a crash-timeout reclaim
+// (worker died mid-run, the stray dashboard entry hasn't been confirmed
+// removed yet) — it exists so a new acquirer can't grab the slot until that
+// removal actually lands. Normal releases go straight occupied -> available;
+// there is no time-based cooldown (see manageAllowlistEntryTask's write-gap).
 export const allowlistSlotStatusEnum = pgEnum("spotify_allowlist_slot_status", [
 	"available",
 	"occupied",
-	"cooldown",
+	"reclaiming",
 ]);
 
-// Only 4 rows are ever seeded — the 5th Dev Mode slot is reserved for admin access and never gets a row (#290).
+// "login" gets its own dedicated slot so a live user never queues behind a
+// multi-minute background sync/export; "rotation" is the shared pool for
+// manual/cron pipeline work.
+export const allowlistSlotKindEnum = pgEnum("spotify_allowlist_slot_kind", [
+	"rotation",
+	"login",
+]);
+
+// Only 4 rows are ever seeded (3 rotation + 1 login) — the 5th Dev Mode slot is reserved for admin access and never gets a row (#290).
 export const spotifyAllowlistSlot = pgTable(
 	"spotify_allowlist_slot",
 	{
 		id: serial("id").primaryKey(),
+		kind: allowlistSlotKindEnum("kind").notNull().default("rotation"),
 		userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
 		// Snapshot of the email actually added to the real dashboard for this
 		// occupancy — not re-derived from user.email, which can drift after the
@@ -32,7 +46,6 @@ export const spotifyAllowlistSlot = pgTable(
 		status: allowlistSlotStatusEnum("status").notNull().default("available"),
 		occupiedAt: timestamp("occupied_at"),
 		releasedAt: timestamp("released_at"),
-		cooldownUntil: timestamp("cooldown_until"),
 		updatedAt: timestamp("updated_at")
 			.defaultNow()
 			.$onUpdate(() => new Date())
@@ -40,7 +53,10 @@ export const spotifyAllowlistSlot = pgTable(
 	},
 	(table) => [
 		index("spotify_allowlist_slot_user_id_idx").on(table.userId),
-		index("spotify_allowlist_slot_status_idx").on(table.status),
+		index("spotify_allowlist_slot_status_kind_idx").on(
+			table.status,
+			table.kind,
+		),
 		uniqueIndex("spotify_allowlist_slot_one_occupied_per_user")
 			.on(table.userId)
 			.where(sql`${table.status} = 'occupied'`),
@@ -49,7 +65,7 @@ export const spotifyAllowlistSlot = pgTable(
 
 export const allowlistQueuePriorityEnum = pgEnum(
 	"spotify_allowlist_queue_priority",
-	["manual", "cron"],
+	["login", "manual", "cron"],
 );
 
 export const allowlistQueueStatusEnum = pgEnum(
@@ -130,6 +146,11 @@ export const spotifyAllowlistSession = pgTable("spotify_allowlist_session", {
 	ciphertext: text("ciphertext").notNull(),
 	iv: text("iv").notNull(),
 	authTag: text("auth_tag").notNull(),
+	// Last time a real add/remove mutation landed on the dashboard — the
+	// global throttle manageAllowlistEntryTask enforces between writes so
+	// they don't come in bursts across slots. Plaintext; not part of the
+	// encrypted session state.
+	lastWriteAt: timestamp("last_write_at"),
 	updatedAt: timestamp("updated_at")
 		.defaultNow()
 		.$onUpdate(() => new Date())

@@ -2,21 +2,24 @@ import { logger } from "@sonaraem/logger";
 import { schedules } from "@trigger.dev/sdk";
 
 import {
-	reclaimExpiredCooldowns,
+	confirmReclaimed,
 	timeoutReclaim,
 } from "../../../services/spotify-allowlist";
 import { sendAllowlistAutomationFailedEmailTask } from "../emails/send-allowlist-automation-failed";
 import { manageAllowlistEntryTask } from "./manage-allowlist-entry";
 
 // A slot force-reclaimed by timeoutReclaim means its worker crashed between
-// adding the email and removing it - the DB is freed, but the real dashboard
-// still has that entry. Best-effort clean it up here; alert either way isn't
-// needed on success since nothing failed, only on a failed removal attempt.
-async function removeStrandedEntry(email: string): Promise<void> {
+// adding the email and removing it - the DB is freed for cleanup purposes,
+// but stays `reclaiming` (unusable by a new acquirer) and the real dashboard
+// still has the stray entry. Only a confirmed removal here frees the slot
+// for reuse — on failure it's left stuck on purpose (see timeoutReclaim's
+// doc comment) and an admin is alerted to fix it by hand.
+async function removeStrandedEntry(email: string): Promise<boolean> {
 	try {
 		await manageAllowlistEntryTask
 			.triggerAndWait({ email, action: "remove" })
 			.unwrap();
+		return true;
 	} catch (err) {
 		logger.error(
 			{ email, err },
@@ -34,6 +37,7 @@ async function removeStrandedEntry(email: string): Promise<void> {
 					"Failed to enqueue Spotify allowlist failure alert during reclaim",
 				);
 			});
+		return false;
 	}
 }
 
@@ -42,13 +46,16 @@ export const reclaimAllowlistSlotsTask = schedules.task({
 	cron: "*/5 * * * *",
 	run: async () => {
 		const stuck = await timeoutReclaim();
-		for (const { email } of stuck) {
-			if (email) await removeStrandedEntry(email);
+		let recovered = 0;
+		for (const { slotId, email } of stuck) {
+			const removed = !email || (await removeStrandedEntry(email));
+			if (removed) {
+				await confirmReclaimed(slotId);
+				recovered++;
+			}
 		}
 
-		const cooledDown = await reclaimExpiredCooldowns();
-
-		const summary = { stuckReclaimed: stuck.length, cooledDown };
+		const summary = { stuckReclaimed: stuck.length, recovered };
 		logger.info(summary, "Completed Spotify allowlist slot reclaim sweep");
 		return summary;
 	},

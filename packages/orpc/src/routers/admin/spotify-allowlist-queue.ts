@@ -19,11 +19,11 @@ export const adminSpotifyAllowlistQueueRouter = {
 				db
 					.select({
 						id: spotifyAllowlistSlot.id,
+						kind: spotifyAllowlistSlot.kind,
 						status: spotifyAllowlistSlot.status,
 						email: spotifyAllowlistSlot.email,
 						occupiedAt: spotifyAllowlistSlot.occupiedAt,
 						releasedAt: spotifyAllowlistSlot.releasedAt,
-						cooldownUntil: spotifyAllowlistSlot.cooldownUntil,
 					})
 					.from(spotifyAllowlistSlot)
 					.orderBy(asc(spotifyAllowlistSlot.id)),

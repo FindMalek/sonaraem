@@ -288,6 +288,13 @@
 			"when": 1788443042749,
 			"tag": "0040_awesome_misty_knight",
 			"breakpoints": true
+		},
+		{
+			"idx": 41,
+			"version": "7",
+			"when": 1788765593333,
+			"tag": "0041_stiff_ronan",
+			"breakpoints": true
 		}
 	]
 }

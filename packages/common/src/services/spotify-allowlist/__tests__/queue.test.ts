@@ -43,9 +43,9 @@ vi.mock("@sonaraem/logger", () => ({
 }));
 
 import {
+	confirmReclaimed,
 	enqueue,
 	nextEligibleForCron,
-	reclaimExpiredCooldowns,
 	releaseSlot,
 	timeoutReclaim,
 	tryAcquireSlot,
@@ -102,20 +102,20 @@ describe("queue", () => {
 
 	describe("tryAcquireSlot", () => {
 		it("refuses when the request is no longer waiting", async () => {
-			push([{ id: 1, userId: "u1", status: "active" }]); // request lookup
+			push([{ id: 1, userId: "u1", status: "active", priority: "manual" }]); // request lookup
 			const result = await tryAcquireSlot(1, "u1@example.com");
 			expect(result).toEqual({ acquired: false, reason: "not-your-turn" });
 		});
 
 		it("refuses when a higher-priority request is ahead in line", async () => {
-			push([{ id: 5, userId: "u1", status: "waiting" }]); // request lookup
+			push([{ id: 5, userId: "u1", status: "waiting", priority: "cron" }]); // request lookup
 			push([{ id: 9 }]); // front-of-queue lookup — someone else
 			const result = await tryAcquireSlot(5, "u1@example.com");
 			expect(result).toEqual({ acquired: false, reason: "not-your-turn" });
 		});
 
 		it("refuses when it's this request's turn but no slot is free", async () => {
-			push([{ id: 5, userId: "u1", status: "waiting" }]); // request lookup
+			push([{ id: 5, userId: "u1", status: "waiting", priority: "manual" }]); // request lookup
 			push([{ id: 5 }]); // front-of-queue lookup — this one
 			push([]); // no available slot
 			const result = await tryAcquireSlot(5, "u1@example.com");
@@ -123,7 +123,7 @@ describe("queue", () => {
 		});
 
 		it("acquires the slot when it's this request's turn and one is free", async () => {
-			push([{ id: 5, userId: "u1", status: "waiting" }]); // request lookup
+			push([{ id: 5, userId: "u1", status: "waiting", priority: "manual" }]); // request lookup
 			push([{ id: 5 }]); // front-of-queue lookup
 			push([{ id: 2 }]); // available slot
 			push([]); // slot update
@@ -131,10 +131,20 @@ describe("queue", () => {
 			const result = await tryAcquireSlot(5, "u1@example.com");
 			expect(result).toEqual({ acquired: true, slotId: 2 });
 		});
+
+		it("acquires the slot for a login-priority request front-of-line", async () => {
+			push([{ id: 8, userId: "u2", status: "waiting", priority: "login" }]); // request lookup
+			push([{ id: 8 }]); // front-of-queue lookup (login pool)
+			push([{ id: 4 }]); // available login slot
+			push([]); // slot update
+			push([]); // request update
+			const result = await tryAcquireSlot(8, "u2@example.com");
+			expect(result).toEqual({ acquired: true, slotId: 4 });
+		});
 	});
 
 	describe("releaseSlot", () => {
-		it("moves the slot to cooldown and marks the request done", async () => {
+		it("moves the slot back to available and marks the request done", async () => {
 			push([]); // slot update
 			push([]); // request update
 			await expect(releaseSlot(2)).resolves.toBeUndefined();
@@ -142,11 +152,10 @@ describe("queue", () => {
 		});
 	});
 
-	describe("reclaimExpiredCooldowns", () => {
-		it("returns the count of reclaimed slots", async () => {
-			push([{ id: 1 }, { id: 2 }]);
-			const count = await reclaimExpiredCooldowns();
-			expect(count).toBe(2);
+	describe("confirmReclaimed", () => {
+		it("moves a reclaiming slot to available", async () => {
+			push([]); // slot update
+			await expect(confirmReclaimed(1)).resolves.toBeUndefined();
 		});
 	});
 
@@ -179,7 +188,12 @@ describe("queue", () => {
 			await expect(yieldCheck()).resolves.toBe(true);
 		});
 
-		it("is false when nothing manual is waiting", async () => {
+		it("is true when a login request is waiting", async () => {
+			push([{ id: 2 }]);
+			await expect(yieldCheck()).resolves.toBe(true);
+		});
+
+		it("is false when nothing higher-priority than cron is waiting", async () => {
 			push([]);
 			await expect(yieldCheck()).resolves.toBe(false);
 		});

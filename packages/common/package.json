@@ -6,7 +6,8 @@
 	"scripts": {
 		"build": "tsc --noEmit",
 		"test": "vitest run",
-		"bootstrap:spotify-allowlist-session": "tsx scripts/bootstrap-spotify-allowlist-session.ts"
+		"bootstrap:spotify-allowlist-session": "tsx scripts/bootstrap-spotify-allowlist-session.ts",
+		"load-test:allowlist-queue": "tsx scripts/load-test-allowlist-queue.ts"
 	},
 	"exports": {
 		".": {

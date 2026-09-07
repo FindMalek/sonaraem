@@ -1,10 +1,13 @@
 import { env } from "@sonaraem/env/server";
 import { logger } from "@sonaraem/logger";
-import { task } from "@trigger.dev/sdk";
+import { queue, task, wait } from "@trigger.dev/sdk";
 import { chromium } from "playwright";
 
+import { DEFAULT_ALLOWLIST_WRITE_GAP_MS } from "../../../constants/spotify-allowlist";
 import {
+	getLastAllowlistWriteAt,
 	loadAllowlistSession,
+	recordAllowlistWriteNow,
 	saveAllowlistSession,
 } from "../../../services/spotify-allowlist";
 import {
@@ -19,6 +22,30 @@ const USERS_URL = () =>
 
 // No login automation yet (needs Spotify's login/OTP DOM) — a session must already exist.
 export class AllowlistAutomationError extends Error {}
+
+// There is exactly one Playwright session for the one automation account —
+// concurrency: 1 is required correctness, not just tidiness. Two browsers
+// sharing the same storageState would race on the session save and could
+// look like two simultaneous logins to Spotify.
+const allowlistAutomationQueue = queue({
+	name: "spotify-allowlist-manage-entry",
+	concurrencyLimit: 1,
+});
+
+// Blocks until at least DEFAULT_ALLOWLIST_WRITE_GAP_MS has passed since the
+// last confirmed dashboard mutation — the whole anti-detection guarantee now
+// that automation is serialized above. Slots themselves free up instantly on
+// release; this is the only throttle.
+async function waitForWriteGap(): Promise<void> {
+	const lastWriteAt = await getLastAllowlistWriteAt();
+	if (!lastWriteAt) return;
+
+	const elapsedMs = Date.now() - lastWriteAt.getTime();
+	const remainingMs = DEFAULT_ALLOWLIST_WRITE_GAP_MS - elapsedMs;
+	if (remainingMs <= 0) return;
+
+	await wait.for({ seconds: Math.ceil(remainingMs / 1000) });
+}
 
 // Fire-and-forget: an alerting failure must never mask the automation
 // failure that triggered it.
@@ -43,6 +70,7 @@ async function alertAdmin(
 
 export const manageAllowlistEntryTask = task({
 	id: "spotify-allowlist-manage-entry",
+	queue: allowlistAutomationQueue,
 	retry: { maxAttempts: 1 },
 	run: async ({
 		email,
@@ -80,11 +108,14 @@ export const manageAllowlistEntryTask = task({
 				);
 			}
 
+			await waitForWriteGap();
+
 			if (action === "add") {
 				await addAllowlistUser(page, email);
 			} else {
 				await removeAllowlistUser(page, email);
 			}
+			await recordAllowlistWriteNow();
 
 			const emails = await scrapeAllowlistEmails(page);
 			const present = emails.includes(email.toLowerCase());

@@ -27,11 +27,11 @@ import { orpc } from "@/shared/api/orpc";
 
 const SLOT_STATUS_VARIANTS: Record<
 	AllowlistSlotStatus,
-	"secondary" | "default" | "outline"
+	"secondary" | "default" | "outline" | "destructive"
 > = {
 	available: "secondary",
 	occupied: "default",
-	cooldown: "outline",
+	reclaiming: "destructive",
 };
 
 const QUEUE_STATUS_VARIANTS: Record<
@@ -47,6 +47,7 @@ const QUEUE_STATUS_VARIANTS: Record<
 
 const PRIORITY_VARIANTS: Record<AllowlistQueuePriority, "default" | "outline"> =
 	{
+		login: "default",
 		manual: "default",
 		cron: "outline",
 	};
@@ -55,7 +56,12 @@ function SlotCard({ slot }: { slot: AllowlistSlotAdminItem }) {
 	return (
 		<div className="flex flex-col gap-1.5 rounded-lg border p-3">
 			<div className="flex items-center justify-between">
-				<span className="font-medium text-sm">Slot {slot.id}</span>
+				<span className="font-medium text-sm">
+					Slot {slot.id}
+					<span className="ml-1.5 font-normal text-muted-foreground text-xs">
+						{slot.kind}
+					</span>
+				</span>
 				<Badge variant={SLOT_STATUS_VARIANTS[slot.status]}>{slot.status}</Badge>
 			</div>
 			{slot.email && (
@@ -63,12 +69,15 @@ function SlotCard({ slot }: { slot: AllowlistSlotAdminItem }) {
 					{slot.email}
 				</span>
 			)}
-			{slot.status === "cooldown" && slot.cooldownUntil && (
+			{slot.status === "reclaiming" && (
+				<span className="text-destructive text-xs">
+					Stuck — needs manual cleanup
+				</span>
+			)}
+			{slot.releasedAt && slot.status === "available" && (
 				<span className="text-muted-foreground text-xs">
-					Free{" "}
-					{formatDistanceToNow(new Date(slot.cooldownUntil), {
-						addSuffix: true,
-					})}
+					Freed{" "}
+					{formatDistanceToNow(new Date(slot.releasedAt), { addSuffix: true })}
 				</span>
 			)}
 		</div>

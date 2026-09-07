@@ -3,9 +3,12 @@ import { z } from "zod";
 export const allowlistSlotStatusEnum = z.enum([
 	"available",
 	"occupied",
-	"cooldown",
+	"reclaiming",
 ]);
 export type AllowlistSlotStatus = z.infer<typeof allowlistSlotStatusEnum>;
+
+export const allowlistSlotKindEnum = z.enum(["rotation", "login"]);
+export type AllowlistSlotKind = z.infer<typeof allowlistSlotKindEnum>;
 
 export const allowlistQueueStatusEnum = z.enum([
 	"waiting",
@@ -16,16 +19,16 @@ export const allowlistQueueStatusEnum = z.enum([
 ]);
 export type AllowlistQueueStatus = z.infer<typeof allowlistQueueStatusEnum>;
 
-export const allowlistQueuePriorityEnum = z.enum(["manual", "cron"]);
+export const allowlistQueuePriorityEnum = z.enum(["login", "manual", "cron"]);
 export type AllowlistQueuePriority = z.infer<typeof allowlistQueuePriorityEnum>;
 
 export const allowlistSlotAdminItemSchema = z.object({
 	id: z.number().int(),
+	kind: allowlistSlotKindEnum,
 	status: allowlistSlotStatusEnum,
 	email: z.string().nullable(),
 	occupiedAt: z.date().nullable(),
 	releasedAt: z.date().nullable(),
-	cooldownUntil: z.date().nullable(),
 });
 export type AllowlistSlotAdminItem = z.infer<
 	typeof allowlistSlotAdminItemSchema

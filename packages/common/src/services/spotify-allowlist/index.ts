@@ -2,13 +2,14 @@ export type {
 	AcquireSlotResult,
 	AllowlistIdentity,
 	AllowlistPriority,
+	AllowlistSlotKind,
 	EnqueueResult,
 	ReclaimedSlot,
 } from "./queue";
 export {
+	confirmReclaimed,
 	enqueue,
 	nextEligibleForCron,
-	reclaimExpiredCooldowns,
 	releaseSlot,
 	timeoutReclaim,
 	tryAcquireSlot,
@@ -16,6 +17,8 @@ export {
 } from "./queue";
 export {
 	clearAllowlistSession,
+	getLastAllowlistWriteAt,
 	loadAllowlistSession,
+	recordAllowlistWriteNow,
 	saveAllowlistSession,
 } from "./session";

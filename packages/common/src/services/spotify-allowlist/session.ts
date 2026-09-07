@@ -38,3 +38,22 @@ export async function clearAllowlistSession(): Promise<void> {
 		.delete(spotifyAllowlistSession)
 		.where(eq(spotifyAllowlistSession.id, SESSION_ROW_ID));
 }
+
+// Global throttle state — the last time a real add/remove mutation landed on
+// the dashboard. Same singleton row as the session itself; not encrypted,
+// it's just a timestamp.
+export async function getLastAllowlistWriteAt(): Promise<Date | null> {
+	const [row] = await db
+		.select({ lastWriteAt: spotifyAllowlistSession.lastWriteAt })
+		.from(spotifyAllowlistSession)
+		.where(eq(spotifyAllowlistSession.id, SESSION_ROW_ID));
+
+	return row?.lastWriteAt ?? null;
+}
+
+export async function recordAllowlistWriteNow(): Promise<void> {
+	await db
+		.update(spotifyAllowlistSession)
+		.set({ lastWriteAt: new Date() })
+		.where(eq(spotifyAllowlistSession.id, SESSION_ROW_ID));
+}

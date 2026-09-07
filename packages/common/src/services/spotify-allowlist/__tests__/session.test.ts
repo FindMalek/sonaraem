@@ -20,6 +20,7 @@ const { db: dbMock, resultsQueue } = vi.hoisted(() => {
 	const db = {
 		select: () => chain(),
 		insert: () => chain(),
+		update: () => chain(),
 		delete: () => chain(),
 	};
 	return { db, resultsQueue };
@@ -39,7 +40,9 @@ vi.mock("../crypto", () => ({
 
 import {
 	clearAllowlistSession,
+	getLastAllowlistWriteAt,
 	loadAllowlistSession,
+	recordAllowlistWriteNow,
 	saveAllowlistSession,
 } from "../session";
 
@@ -80,5 +83,21 @@ describe("allowlist session persistence", () => {
 	it("clears the stored session", async () => {
 		push(undefined);
 		await expect(clearAllowlistSession()).resolves.toBeUndefined();
+	});
+
+	it("returns null when no write has ever been recorded", async () => {
+		push([{ lastWriteAt: null }]);
+		await expect(getLastAllowlistWriteAt()).resolves.toBeNull();
+	});
+
+	it("returns the last recorded write time", async () => {
+		const when = new Date("2026-01-01T00:00:00Z");
+		push([{ lastWriteAt: when }]);
+		await expect(getLastAllowlistWriteAt()).resolves.toEqual(when);
+	});
+
+	it("records the current time as the last write", async () => {
+		push(undefined);
+		await expect(recordAllowlistWriteNow()).resolves.toBeUndefined();
 	});
 });
