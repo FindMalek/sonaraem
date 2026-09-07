@@ -34,6 +34,12 @@ import { Button } from "@sonaraem/ui";
 
 Do NOT use `<Card>` for settings sections, stat blocks, or metadata rows.
 
+## Forms
+
+- Build forms with `@tanstack/react-form`'s `useForm` + the shadcn `Field`/`FieldGroup`/`FieldLabel`/`FieldError`/`FieldDescription` primitives from `@sonaraem/ui` — see `apps/web/src/components/waitlist-form.tsx` or `apps/dashboard/src/app/(dashboard)/feedback/page.tsx`.
+- Keep every form-adjacent value — including checkboxes/toggles that don't post to the backend — inside a `form.Field`, not a sibling `useState`. The form is the single source of truth; strip UI-only fields out of `value` in `onSubmit` before sending the payload.
+- Use `Label` from `@sonaraem/ui` for any standalone label, never a raw `<label>`.
+
 ## Do Not
 
 - Copy-paste shadcn component source into app directories — extend via props instead

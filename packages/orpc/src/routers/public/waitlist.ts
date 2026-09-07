@@ -35,7 +35,6 @@ export const waitlistRouter = {
 			}
 
 			const email = input.email.toLowerCase().trim();
-			// Defaults to the same email — see the schema's doc comment.
 			const spotifyEmail = (input.spotifyEmail ?? input.email)
 				.toLowerCase()
 				.trim();
