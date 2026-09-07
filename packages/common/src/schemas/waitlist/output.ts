@@ -12,3 +12,10 @@ export const waitlistStatusOutputSchema = z.object({
 	queuePosition: z.number().int().min(1).nullable(),
 });
 export type WaitlistStatusOutput = z.infer<typeof waitlistStatusOutputSchema>;
+
+export const spotifyAuthFailureOutputSchema = z.object({
+	logged: z.boolean(),
+});
+export type SpotifyAuthFailureOutput = z.infer<
+	typeof spotifyAuthFailureOutputSchema
+>;
