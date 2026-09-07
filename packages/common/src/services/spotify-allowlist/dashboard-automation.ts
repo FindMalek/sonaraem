@@ -13,21 +13,18 @@ export async function scrapeAllowlistEmails(page: Page): Promise<string[]> {
 	return emails;
 }
 
+// "Full Name" and "Email" are always-visible inline form fields, not a
+// dialog that opens on click — "Add user" is just that form's submit button,
+// and it never hides on success, so the new row rendering in the table is
+// the only real confirmation signal.
 // "Full Name" has no visible `required` attribute, but we fill it anyway to be safe — the local part of the email is a fine placeholder.
 export async function addAllowlistUser(
 	page: Page,
 	email: string,
 ): Promise<void> {
-	await page.getByRole("button", { name: "Add user", exact: true }).click();
-	await page.locator("#email").waitFor({ state: "visible" });
 	await page.locator("#name").fill(email.split("@")[0] ?? email);
 	await page.locator("#email").fill(email);
 	await page.locator(`form button[type="submit"]`).click();
-	// The dialog only closes once Spotify's add-user request resolves — waiting
-	// for it to disappear is what separates "submitted" from "actually landed".
-	// If it's still open at the timeout, submission was rejected (validation,
-	// cap reached, etc.) rather than merely slow.
-	await page.locator("#email").waitFor({ state: "hidden", timeout: 15_000 });
 	// The table can render empty mid-refetch right after — wait for the row itself.
 	await page
 		.locator(`${TABLE_SELECTOR} tbody tr`)

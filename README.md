@@ -126,6 +126,17 @@ Open [http://127.0.0.1:3004/login](http://127.0.0.1:3004/login) and sign in with
 
 **Auth isolation:** Admin uses `/api/admin-auth` (`sonaraem-admin` cookie). Dashboard uses `/api/auth` (`sonaraem-dashboard` cookie). Signing into one does not sign you into the other.
 
+## Spotify allowlist (local dev)
+
+Spotify Dev Mode rejects `/authorize` outright for a non-allowlisted account, so any flow that touches the real allowlist (sign-in gating, onboarding sync, the reclaim cron) needs a saved Playwright session for the automation account first. Login automation isn't built yet — seed it by hand, once:
+
+```bash
+pnpm --filter @sonaraem/common exec playwright install chromium   # one-time, downloads the browser binary
+pnpm --filter @sonaraem/common run bootstrap:spotify-allowlist-session
+```
+
+This opens a real browser — log into the automation account (OTP included), press Enter in the terminal once you're on the Dashboard, and the session gets saved. Re-run the `bootstrap:` command if you ever see `No saved Spotify allowlist session` or `Saved session didn't reach the Users table` in the logs — the saved session expired. `browserType.launch: Executable doesn't exist at ...` means the `playwright install` step above was skipped.
+
 ## Testing
 
 ```bash

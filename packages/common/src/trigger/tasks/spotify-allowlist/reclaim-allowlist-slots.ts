@@ -83,7 +83,7 @@ async function reconcileWithDashboard(): Promise<{
 
 		if (!reachedTable) {
 			throw new AllowlistAutomationError(
-				"Saved session didn't reach the Users table — it's likely expired (login automation isn't built yet)",
+				"Saved session didn't reach the Users table — it's likely expired. Run `pnpm --filter @sonaraem/common run bootstrap:spotify-allowlist-session` to re-seed it (login automation isn't built yet)",
 			);
 		}
 

@@ -35,6 +35,14 @@ pnpm db:setup   # starts Docker Postgres + pushes Drizzle schema
 
 For Trigger.dev background jobs, fill in `SONARAEM_TRIGGER_SECRET_KEY` and `SONARAEM_TRIGGER_PROJECT_REF` from [cloud.trigger.dev](https://cloud.trigger.dev).
 
+If you'll touch the Spotify allowlist automation (`@sonaraem/common`'s `spotify-allowlist` services/tasks, or anything that signs a user into Spotify), install Playwright's browser binary once — `pnpm install` alone doesn't download it:
+
+```bash
+pnpm --filter @sonaraem/common exec playwright install chromium
+```
+
+Skipping this surfaces as `browserType.launch: Executable doesn't exist at ...` the first time that code runs. See [README § Spotify allowlist (local dev)](./README.md#spotify-allowlist-local-dev) for seeding the login session itself.
+
 ## Most-Used Scripts
 
 ### Development

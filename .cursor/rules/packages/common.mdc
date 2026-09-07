@@ -71,6 +71,17 @@ Epsilon in normalised-Euclidean units: `0.30` ≈ cos(θ) > ~0.95 (strict), `0.5
 
 Tuning: clusters collapsing into a few mega-clusters → lower epsilon (try 0.20–0.25). Clusters too fragmented / mostly noise → raise it (try 0.35–0.45). The post-clustering sanity log (clusters/tracks ratio) makes regressions visible — re-tune against a representative library.
 
+## Spotify Allowlist (local dev)
+
+`services/spotify-allowlist/` automation (add/remove entries, the reclaim cron, login-slot gating) drives a real headless browser against the Spotify Dev Mode dashboard using a saved Playwright session — login automation isn't built (OTP), so that session must be seeded by hand once:
+
+```bash
+pnpm --filter @sonaraem/common exec playwright install chromium   # one-time, `pnpm install` alone doesn't fetch the browser binary
+pnpm --filter @sonaraem/common run bootstrap:spotify-allowlist-session
+```
+
+Opens a visible browser, you log into the automation account, press Enter in the terminal once past the OTP prompt, and it saves the session via `saveAllowlistSession`. Re-run the `bootstrap:` command whenever automation throws `No saved Spotify allowlist session` or `Saved session didn't reach the Users table` (session expired). `browserType.launch: Executable doesn't exist at ...` means the `playwright install` step was skipped.
+
 ## Exports
 
 All exports go through `packages/common/package.json` `exports` map. Add a new export entry when adding a new path.
