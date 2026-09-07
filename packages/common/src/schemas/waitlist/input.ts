@@ -2,10 +2,7 @@ import { z } from "zod";
 
 export const waitlistSignupInput = z.object({
 	email: z.string().trim().email(),
-	// Optional — defaults to `email` server-side when omitted. The frontend
-	// always keeps this in sync while its "same as above" checkbox is
-	// checked, but the API itself shouldn't depend on a specific client
-	// doing that; most signups genuinely use the same email for both.
+	// Optional — the backend defaults it to `email` server-side when omitted.
 	spotifyEmail: z.string().trim().email().optional(),
 	// Honeypot: real users never fill this in. Bots that auto-fill all fields will.
 	website: z.string().optional(),

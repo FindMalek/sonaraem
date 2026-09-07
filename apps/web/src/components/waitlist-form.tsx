@@ -24,9 +24,7 @@ import { orpc } from "@/utils/orpc";
 
 export function WaitlistForm() {
 	const [submitted, setSubmitted] = useState(false);
-	// Checked by default — most people's Spotify account uses the same email
-	// they'd sign up with. Same pattern as "billing address same as shipping":
-	// unchecking reveals a second field instead of showing both up front.
+	// Checked by default — same "billing address same as shipping" pattern.
 	const [sameEmail, setSameEmail] = useState(true);
 
 	const signup = useMutation(
@@ -41,10 +39,7 @@ export function WaitlistForm() {
 	const form = useForm({
 		defaultValues: { email: "", spotifyEmail: "", website: "" },
 		validators: {
-			// spotifyEmail is optional on the shared API schema (the backend
-			// defaults it to `email`), but this form always keeps a real value
-			// in it (synced while "same as above" is checked) — re-require it
-			// here so the field's own validity state stays meaningful.
+			// Re-required here: this form always keeps a real synced value in it.
 			onSubmit: waitlistSignupInput.extend({
 				spotifyEmail: z.string().trim().email(),
 				website: z.string(),
@@ -88,10 +83,7 @@ export function WaitlistForm() {
 									onBlur={field.handleBlur}
 									onChange={(e) => {
 										field.handleChange(e.target.value);
-										// Keep the hidden spotifyEmail field in sync so it's
-										// still a valid submission while the second input is
-										// collapsed — the checkbox is the single source of
-										// truth for "are these the same".
+										// Keep the hidden spotifyEmail field synced while checked.
 										if (sameEmail) {
 											form.setFieldValue("spotifyEmail", e.target.value);
 										}
