@@ -32,9 +32,10 @@ export const waitlistRouter = {
 			}
 
 			const email = input.email.toLowerCase().trim();
+			const spotifyEmail = input.spotifyEmail.toLowerCase().trim();
 			const [inserted] = await db
 				.insert(waitlistSignup)
-				.values({ email })
+				.values({ email, spotifyEmail })
 				.onConflictDoNothing({ target: waitlistSignup.email })
 				.returning({ id: waitlistSignup.id });
 

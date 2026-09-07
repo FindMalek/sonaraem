@@ -5,7 +5,9 @@
 	"type": "module",
 	"scripts": {
 		"build": "tsc --noEmit",
-		"test": "vitest run"
+		"test": "vitest run",
+		"bootstrap:spotify-allowlist-session": "tsx scripts/bootstrap-spotify-allowlist-session.ts",
+		"load-test:allowlist-queue": "tsx scripts/load-test-allowlist-queue.ts"
 	},
 	"exports": {
 		".": {
@@ -80,6 +82,18 @@
 		"./trigger/tasks/emails/poll-spotify-reauth-reminders": {
 			"default": "./src/trigger/tasks/emails/poll-spotify-reauth-reminders.ts"
 		},
+		"./trigger/tasks/emails/send-allowlist-automation-failed": {
+			"default": "./src/trigger/tasks/emails/send-allowlist-automation-failed.ts"
+		},
+		"./trigger/tasks/spotify-allowlist/spike-dashboard-reach": {
+			"default": "./src/trigger/tasks/spotify-allowlist/spike-dashboard-reach.ts"
+		},
+		"./trigger/tasks/spotify-allowlist/reclaim-allowlist-slots": {
+			"default": "./src/trigger/tasks/spotify-allowlist/reclaim-allowlist-slots.ts"
+		},
+		"./trigger/tasks/spotify-allowlist/manage-allowlist-entry": {
+			"default": "./src/trigger/tasks/spotify-allowlist/manage-allowlist-entry.ts"
+		},
 		"./services/brain": {
 			"default": "./src/services/brain/index.ts"
 		},
@@ -91,6 +105,9 @@
 		},
 		"./services/organize": {
 			"default": "./src/services/organize/index.ts"
+		},
+		"./services/spotify-allowlist": {
+			"default": "./src/services/spotify-allowlist/index.ts"
 		},
 		"./services/waitlist": {
 			"default": "./src/services/waitlist/index.ts"
@@ -133,12 +150,14 @@
 		"drizzle-orm": "catalog:",
 		"p-limit": "^7.3.1",
 		"p-retry": "^8.0.0",
+		"playwright": "catalog:",
 		"resend": "catalog:",
 		"zod": "catalog:"
 	},
 	"devDependencies": {
 		"@sonaraem/config": "workspace:*",
 		"@types/density-clustering": "^1.3.3",
+		"tsx": "^4.23.13",
 		"typescript": "catalog:",
 		"vitest": "^4.1.11"
 	}

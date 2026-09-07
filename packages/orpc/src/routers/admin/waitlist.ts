@@ -57,6 +57,7 @@ export const adminWaitlistRouter = {
 					.select({
 						id: waitlistSignup.id,
 						email: waitlistSignup.email,
+						spotifyEmail: waitlistSignup.spotifyEmail,
 						status: waitlistSignup.status,
 						note: waitlistSignup.note,
 						confirmationEmailSentAt: waitlistSignup.confirmationEmailSentAt,

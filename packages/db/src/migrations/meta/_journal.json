@@ -260,6 +260,41 @@
 			"when": 1788267242834,
 			"tag": "0036_complete_elektra",
 			"breakpoints": true
+		},
+		{
+			"idx": 37,
+			"version": "7",
+			"when": 1788426085291,
+			"tag": "0037_even_madelyne_pryor",
+			"breakpoints": true
+		},
+		{
+			"idx": 38,
+			"version": "7",
+			"when": 1788432498908,
+			"tag": "0038_chubby_sally_floyd",
+			"breakpoints": true
+		},
+		{
+			"idx": 39,
+			"version": "7",
+			"when": 1788442898043,
+			"tag": "0039_bright_phalanx",
+			"breakpoints": true
+		},
+		{
+			"idx": 40,
+			"version": "7",
+			"when": 1788443042749,
+			"tag": "0040_awesome_misty_knight",
+			"breakpoints": true
+		},
+		{
+			"idx": 41,
+			"version": "7",
+			"when": 1788765593333,
+			"tag": "0041_stiff_ronan",
+			"breakpoints": true
 		}
 	]
 }

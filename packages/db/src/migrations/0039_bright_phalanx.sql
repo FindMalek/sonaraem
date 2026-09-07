@@ -1,0 +1,1 @@
+ALTER TABLE "spotify_allowlist_slot" ADD COLUMN "email" text;

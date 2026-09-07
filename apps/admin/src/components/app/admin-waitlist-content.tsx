@@ -181,6 +181,14 @@ export function AdminWaitlistContent() {
 			header: "Email",
 		},
 		{
+			accessorKey: "spotifyEmail",
+			header: "Spotify email",
+			cell: ({ row }) =>
+				row.original.spotifyEmail ?? (
+					<span className="text-muted-foreground italic">not collected</span>
+				),
+		},
+		{
 			accessorKey: "status",
 			header: "Status",
 			cell: ({ row }) => (

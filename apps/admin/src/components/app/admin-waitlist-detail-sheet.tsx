@@ -107,6 +107,9 @@ export function AdminWaitlistDetailSheet({
 								<div>
 									<SectionHeading>Contact</SectionHeading>
 									<DetailRow label="Email">{item.email}</DetailRow>
+									<DetailRow label="Spotify email">
+										{item.spotifyEmail ?? "not collected"}
+									</DetailRow>
 									<div className="space-y-2 py-1.5">
 										<span className="text-muted-foreground text-xs">Note</span>
 										<Input

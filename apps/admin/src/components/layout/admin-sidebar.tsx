@@ -17,6 +17,7 @@ import {
 	SidebarMenuItem,
 	SidebarSeparator,
 } from "@sonaraem/ui";
+import type { Route } from "next";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -28,7 +29,13 @@ const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
 	person: Icons.user,
 	message: Icons.messageCircle,
 	chart: Icons.chart,
+	key: Icons.key,
 };
+
+// TS can't distribute Next's typed-route generic over a mapped union prop — one boundary cast here, not per-render.
+const NAV_ITEMS = ADMIN_NAV_ITEMS as ReadonlyArray<
+	(typeof ADMIN_NAV_ITEMS)[number] & { path: Route }
+>;
 
 export function AdminSidebar() {
 	const pathname = usePathname();
@@ -58,7 +65,7 @@ export function AdminSidebar() {
 					<SidebarGroupLabel>Navigation</SidebarGroupLabel>
 					<SidebarGroupContent>
 						<SidebarMenu>
-							{ADMIN_NAV_ITEMS.map((item) => {
+							{NAV_ITEMS.map((item) => {
 								const Icon = NAV_ICONS[item.icon] ?? Icons.home;
 								const isActive =
 									item.path === "/"

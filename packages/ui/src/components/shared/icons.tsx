@@ -35,6 +35,7 @@ import {
 	IconFileText,
 	IconHome,
 	IconInfoCircle,
+	IconKey,
 	IconLayoutSidebar,
 	IconLoader,
 	IconLogout,
@@ -118,6 +119,7 @@ export const Icons = {
 	users: IconUsers,
 	logout: IconLogout,
 	messageCircle: IconMessageCircle,
+	key: IconKey,
 
 	// Loading / pipeline states
 	checkCircle: IconCircleCheck,

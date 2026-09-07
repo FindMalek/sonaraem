@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import type { CreatedPlaylist } from "@sonaraem/common/schemas";
 import { DASHBOARD_ROUTES } from "@sonaraem/common/utils/routes";
 import { db } from "@sonaraem/db";
@@ -8,6 +10,7 @@ import {
 	sendFeedback3DayEmail,
 	sendOrganizeCompleteEmail,
 	sendOrganizeWeeklyDigestEmail,
+	sendSpotifyAllowlistFailedEmail,
 	sendSpotifyReauthEmail,
 	sendWelcomeEmail,
 } from "@sonaraem/email/send";
@@ -47,6 +50,16 @@ async function getUserForEmail(userId: string) {
 		.where(eq(user.id, userId));
 
 	return userRow ?? null;
+}
+
+async function getAdminUserForEmail() {
+	// DB-enforced at most one 'admin' row (user_single_admin_idx) — this is that one account.
+	const [adminRow] = await db
+		.select({ email: user.email })
+		.from(user)
+		.where(eq(user.role, "admin"));
+
+	return adminRow ?? null;
 }
 
 export async function sendOrganizeCompleteNotification({
@@ -641,6 +654,63 @@ export async function sendFeedback3DayNotification({
 			providerMessageId: result.emailId,
 		},
 		"Email delivery sent",
+	);
+	return { ok: true, reason: "sent" as const };
+}
+
+// Ops alert to the single admin account, not a user-facing template — no
+// per-recipient notification policy or delivery dedupe: every automation
+// failure should page the admin, including repeats.
+export async function sendAllowlistAutomationFailedNotification({
+	targetEmail,
+	action,
+	errorMessage,
+}: {
+	targetEmail: string;
+	action: "add" | "remove";
+	errorMessage: string;
+}) {
+	const config = buildSendConfig();
+	if (!config) {
+		logger.warn(
+			{ targetEmail, action },
+			"Skipping Spotify allowlist failure alert — email provider is not configured",
+		);
+		return { ok: false, reason: "provider_not_configured" as const };
+	}
+
+	const admin = await getAdminUserForEmail();
+	if (!admin?.email) {
+		logger.warn(
+			{ targetEmail, action },
+			"Skipping Spotify allowlist failure alert — no admin account found",
+		);
+		return { ok: false, reason: "no_admin_account" as const };
+	}
+
+	const result = await sendSpotifyAllowlistFailedEmail({
+		config,
+		to: admin.email,
+		idempotencyKey: `spotify-allowlist-failed/${randomUUID()}`,
+		props: {
+			triggerRunsUrl: "https://cloud.trigger.dev",
+			targetEmail,
+			action,
+			errorMessage,
+		},
+	});
+
+	if (!result.ok) {
+		logger.warn(
+			{ targetEmail, action, error: result.error },
+			"Spotify allowlist failure alert failed to send",
+		);
+		return { ok: false, reason: "send_failed" as const, error: result.error };
+	}
+
+	logger.info(
+		{ targetEmail, action, providerMessageId: result.emailId },
+		"Spotify allowlist failure alert sent",
 	);
 	return { ok: true, reason: "sent" as const };
 }

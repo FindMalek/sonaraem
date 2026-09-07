@@ -12,6 +12,7 @@ export {
 export { sendInvoiceNotification } from "./send-billing";
 export { sendMarketingFeatureUpdate } from "./send-marketing";
 export {
+	sendAllowlistAutomationFailedNotification,
 	sendFeedback3DayNotification,
 	sendOrganizeCompleteNotification,
 	sendOrganizeWeeklyDigestNotification,

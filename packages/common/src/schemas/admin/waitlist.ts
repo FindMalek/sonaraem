@@ -13,6 +13,7 @@ export type WaitlistAdminListInput = z.infer<typeof waitlistAdminListInput>;
 export const waitlistAdminItemSchema = z.object({
 	id: z.number().int(),
 	email: z.string(),
+	spotifyEmail: z.string().nullable(),
 	status: waitlistStatusEnum,
 	note: z.string().nullable(),
 	confirmationEmailSentAt: z.date().nullable(),

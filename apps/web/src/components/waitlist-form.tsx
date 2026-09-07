@@ -1,22 +1,25 @@
 "use client";
 
+import { waitlistSignupInput } from "@sonaraem/common/schemas";
 import {
+	Button,
+	Field,
+	FieldDescription,
+	FieldError,
+	FieldGroup,
+	FieldLabel,
 	Icons,
-	InputGroup,
-	InputGroupAddon,
-	InputGroupButton,
-	InputGroupInput,
-	Label,
+	Input,
 } from "@sonaraem/ui";
+import { useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
+import { z } from "zod";
 
 import { orpc } from "@/utils/orpc";
 
 export function WaitlistForm() {
-	const [email, setEmail] = useState("");
-	const [website, setWebsite] = useState("");
 	const [submitted, setSubmitted] = useState(false);
 
 	const signup = useMutation(
@@ -27,6 +30,16 @@ export function WaitlistForm() {
 			},
 		}),
 	);
+
+	const form = useForm({
+		defaultValues: { email: "", spotifyEmail: "", website: "" },
+		validators: {
+			onSubmit: waitlistSignupInput.extend({ website: z.string() }),
+		},
+		onSubmit: async ({ value }) => {
+			await signup.mutateAsync(value);
+		},
+	});
 
 	if (submitted) {
 		return (
@@ -40,51 +53,95 @@ export function WaitlistForm() {
 		<form
 			onSubmit={(e) => {
 				e.preventDefault();
-				signup.mutate({ email, website });
+				form.handleSubmit();
 			}}
-			className="flex flex-col gap-2"
 		>
-			<Label htmlFor="email">Email address</Label>
-			<InputGroup>
-				<InputGroupInput
-					id="email"
-					type="email"
-					required
-					value={email}
-					onChange={(e) => setEmail(e.target.value)}
-					placeholder="you@example.com"
+			<FieldGroup>
+				<form.Field
+					name="email"
+					children={(field) => {
+						const isInvalid =
+							field.state.meta.isTouched && !field.state.meta.isValid;
+						return (
+							<Field data-invalid={isInvalid}>
+								<FieldLabel htmlFor={field.name}>Email address</FieldLabel>
+								<Input
+									id={field.name}
+									name={field.name}
+									type="email"
+									placeholder="you@example.com"
+									value={field.state.value}
+									onBlur={field.handleBlur}
+									onChange={(e) => field.handleChange(e.target.value)}
+									aria-invalid={isInvalid}
+								/>
+								{isInvalid && <FieldError errors={field.state.meta.errors} />}
+							</Field>
+						);
+					}}
 				/>
-				<InputGroupAddon align="inline-end">
-					<InputGroupButton
-						type="submit"
-						size="icon-sm"
-						variant="default"
-						disabled={signup.isPending}
-						aria-label="Join waitlist"
-					>
-						{signup.isPending ? (
-							<Icons.spinner className="animate-spin" />
-						) : (
-							<Icons.arrowRight />
-						)}
-					</InputGroupButton>
-				</InputGroupAddon>
-			</InputGroup>
 
-			{/* Honeypot field: hidden from real users, only bots fill it in. */}
-			<div className="absolute h-0 w-0 overflow-hidden opacity-0">
-				<Label htmlFor="website">Website</Label>
-				<InputGroupInput
-					id="website"
-					name="website"
-					type="text"
-					tabIndex={-1}
-					autoComplete="off"
-					value={website}
-					onChange={(e) => setWebsite(e.target.value)}
-					aria-hidden="true"
+				<form.Field
+					name="spotifyEmail"
+					children={(field) => {
+						const isInvalid =
+							field.state.meta.isTouched && !field.state.meta.isValid;
+						return (
+							<Field data-invalid={isInvalid}>
+								<FieldLabel htmlFor={field.name}>
+									Spotify account email
+								</FieldLabel>
+								<Input
+									id={field.name}
+									name={field.name}
+									type="email"
+									placeholder="spotify@example.com"
+									value={field.state.value}
+									onBlur={field.handleBlur}
+									onChange={(e) => field.handleChange(e.target.value)}
+									aria-invalid={isInvalid}
+								/>
+								<FieldDescription>
+									May differ from the email above — Spotify accounts via Google,
+									Apple, or Facebook commonly use a different one.
+								</FieldDescription>
+								{isInvalid && <FieldError errors={field.state.meta.errors} />}
+							</Field>
+						);
+					}}
 				/>
-			</div>
+
+				<form.Field name="website">
+					{(field) => (
+						<div className="absolute h-0 w-0 overflow-hidden opacity-0">
+							<FieldLabel htmlFor={field.name}>Website</FieldLabel>
+							<Input
+								id={field.name}
+								name={field.name}
+								type="text"
+								tabIndex={-1}
+								autoComplete="off"
+								value={field.state.value}
+								onChange={(e) => field.handleChange(e.target.value)}
+								aria-hidden="true"
+							/>
+						</div>
+					)}
+				</form.Field>
+
+				<form.Subscribe selector={(state) => state.isSubmitting}>
+					{(isSubmitting) => (
+						<Button
+							type="submit"
+							disabled={isSubmitting}
+							isLoading={isSubmitting}
+						>
+							Join waitlist
+							<Icons.arrowRight />
+						</Button>
+					)}
+				</form.Subscribe>
+			</FieldGroup>
 		</form>
 	);
 }

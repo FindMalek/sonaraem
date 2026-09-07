@@ -9,6 +9,7 @@ export * from "./genre-domain";
 export * from "./pipeline-run";
 export * from "./playlist";
 export * from "./spotify";
+export * from "./spotify-allowlist";
 export * from "./track";
 export * from "./track-analysis";
 export * from "./user-email-preferences";

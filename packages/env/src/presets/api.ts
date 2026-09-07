@@ -5,6 +5,7 @@ import {
 	authModule,
 	emailsModule,
 	observabilityModule,
+	spotifyAllowlistModule,
 	triggerModule,
 	urlsModule,
 } from "../modules";
@@ -21,6 +22,7 @@ export const apiEnv = createEnv({
 		...authModule.server,
 		...emailsModule.server,
 		...observabilityModule.server,
+		...spotifyAllowlistModule.server,
 		...triggerModule.server,
 	},
 	client: {

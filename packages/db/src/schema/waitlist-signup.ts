@@ -20,6 +20,8 @@ export const waitlistSignup = pgTable(
 	{
 		id: serial("id").primaryKey(),
 		email: text("email").notNull().unique(),
+		// Nullable — pre-#290 rows have no value to backfill; required for new signups via waitlistSignupInput instead.
+		spotifyEmail: text("spotify_email"),
 		status: waitlistStatusEnum("status").notNull().default("pending"),
 		note: text("note"),
 		confirmationEmailSentAt: timestamp("confirmation_email_sent_at"),

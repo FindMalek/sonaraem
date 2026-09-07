@@ -6,6 +6,7 @@ import {
 	updateRun,
 	updateStageProgress,
 } from "../../../services/organize";
+import { withAllowlistSlot } from "../../utils/allowlist-slot";
 
 export const exportStageTask = task({
 	id: "organize-stage-export",
@@ -21,7 +22,9 @@ export const exportStageTask = task({
 	}) => {
 		await checkCancelled(runId, userId);
 		await updateRun(runId, { currentStage: "export" });
-		const result = await autoExportUpdatedPlaylists(userId, playlistIds);
+		const result = await withAllowlistSlot(userId, runId, () =>
+			autoExportUpdatedPlaylists(userId, playlistIds),
+		);
 		await updateStageProgress(runId, "export", result);
 		return result;
 	},

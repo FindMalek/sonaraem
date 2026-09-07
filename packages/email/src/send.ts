@@ -19,6 +19,10 @@ import {
 	type OrganizeWeeklyDigestEmailProps,
 } from "../emails/organize-weekly-digest";
 import {
+	SpotifyAllowlistFailedEmail,
+	type SpotifyAllowlistFailedEmailProps,
+} from "../emails/spotify-allowlist-failed";
+import {
 	SpotifyReauthEmail,
 	type SpotifyReauthEmailProps,
 } from "../emails/spotify-reauth";
@@ -102,6 +106,13 @@ type SendSpotifyReauthInput = {
 	config: SendEmailConfig;
 	to: string;
 	props: SpotifyReauthEmailProps;
+	idempotencyKey: string;
+};
+
+type SendSpotifyAllowlistFailedInput = {
+	config: SendEmailConfig;
+	to: string;
+	props: SpotifyAllowlistFailedEmailProps;
 	idempotencyKey: string;
 };
 
@@ -325,6 +336,32 @@ export async function sendSpotifyReauthEmail(
 			subject,
 			html,
 			tags: [{ name: "category", value: "spotify_reauth" }],
+		},
+		{ idempotencyKey: input.idempotencyKey },
+	);
+
+	if (error) {
+		return { ok: false, error: error.message };
+	}
+
+	return { ok: true, emailId: data?.id ?? "" };
+}
+
+export async function sendSpotifyAllowlistFailedEmail(
+	input: SendSpotifyAllowlistFailedInput,
+): Promise<SendResult> {
+	const config = resolveConfig(input.config);
+	const resend = createResend(config);
+	const html = await render(SpotifyAllowlistFailedEmail(input.props));
+
+	const { data, error } = await resend.emails.send(
+		{
+			from: config.from,
+			to: [input.to],
+			replyTo: config.replyTo ? [config.replyTo] : undefined,
+			subject: `Spotify allowlist ${input.props.action} failed for ${input.props.targetEmail}`,
+			html,
+			tags: [{ name: "category", value: "spotify_allowlist_failed" }],
 		},
 		{ idempotencyKey: input.idempotencyKey },
 	);

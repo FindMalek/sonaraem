@@ -1,0 +1,1 @@
+ALTER TABLE "spotify_allowlist_queue_request" ADD COLUMN "email" text;

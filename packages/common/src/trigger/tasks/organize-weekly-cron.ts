@@ -1,15 +1,17 @@
 import { db } from "@sonaraem/db";
-import { user } from "@sonaraem/db/schema/auth";
 import { pipelineRun } from "@sonaraem/db/schema/pipeline-run";
 import { logger } from "@sonaraem/logger";
 import { schedules } from "@trigger.dev/sdk";
 import { and, eq } from "drizzle-orm";
 
 import { updateRun } from "../../services/organize";
+import { nextEligibleForCron } from "../../services/spotify-allowlist";
 import { organizePipeline } from "./organize";
 
 const RUNNING_CONSTRAINT_NAME = "pipeline_run_one_running_per_user";
 const MAX_INSERT_ATTEMPTS = 3;
+// Bounds the query — far more than the realistic weekly count under the allowlist pool (#290).
+const CRON_BATCH_SIZE = 100;
 
 function isAlreadyRunningConflict(err: unknown): boolean {
 	if (typeof err !== "object" || err === null) return false;
@@ -73,13 +75,14 @@ export type OrganizeAllUsersResult = {
 };
 
 // triggeredBy: "cron" is what makes send-organize-complete.ts send the weekly digest email.
+// Fairness vs. a concurrent manual request isn't handled here — tryAcquireSlot re-checks front-of-queue per poll.
 export async function runOrganizeForAllUsers(): Promise<
 	OrganizeAllUsersResult[]
 > {
-	const users = await db.select({ id: user.id }).from(user);
+	const userIds = await nextEligibleForCron(CRON_BATCH_SIZE);
 	const results: OrganizeAllUsersResult[] = [];
 
-	for (const { id } of users) {
+	for (const id of userIds) {
 		try {
 			const insertResult = await insertRunOrSkip(id, "cron");
 
