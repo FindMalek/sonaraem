@@ -26,12 +26,6 @@ import {
 	waitForWriteGap,
 } from "./manage-allowlist-entry";
 
-// A slot force-reclaimed by timeoutReclaim means its worker crashed between
-// adding the email and removing it - the DB is freed for cleanup purposes,
-// but stays `reclaiming` (unusable by a new acquirer) and the real dashboard
-// still has the stray entry. Only a confirmed removal here frees the slot
-// for reuse — on failure it's left stuck on purpose (see timeoutReclaim's
-// doc comment) and an admin is alerted to fix it by hand.
 async function removeStrandedEntry(email: string): Promise<boolean> {
 	try {
 		await manageAllowlistEntryTask
@@ -59,7 +53,6 @@ async function removeStrandedEntry(email: string): Promise<boolean> {
 	}
 }
 
-// Catches what timeoutReclaim can't: an email actually on the dashboard that our own ledger never marked occupied.
 async function reconcileWithDashboard(): Promise<{
 	scraped: number;
 	pruned: string[];
@@ -140,7 +133,6 @@ async function reconcileWithDashboard(): Promise<{
 export const reclaimAllowlistSlotsTask = schedules.task({
 	id: "spotify-allowlist-reclaim-slots",
 	cron: "*/5 * * * *",
-	// Shares manageAllowlistEntryTask's queue so it can't race the reconcile sweep below.
 	queue: allowlistAutomationQueue,
 	run: async () => {
 		const stuck = await timeoutReclaim();
