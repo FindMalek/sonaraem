@@ -1,13 +1,43 @@
 import { clearSpotifyNeedsReauth } from "@sonaraem/common/services/music";
-import { tryAutoApproveByEmail } from "@sonaraem/common/services/waitlist";
+import type { AllowlistIdentity } from "@sonaraem/common/services/spotify-allowlist";
+import {
+	acquireLoginSlot,
+	releaseLoginSlot,
+} from "@sonaraem/common/services/spotify-allowlist";
+import {
+	getWaitlistInviteIdentity,
+	tryAutoApproveByEmail,
+} from "@sonaraem/common/services/waitlist";
 import { sendWelcomeEmailTask } from "@sonaraem/common/trigger/tasks/emails/send-welcome";
 import { buildTrustedOrigins } from "@sonaraem/common/utils/origin";
 import * as schema from "@sonaraem/db/schema/auth";
 import { logger } from "@sonaraem/logger";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import {
+	APIError,
+	createAuthMiddleware,
+	getSessionFromCtx,
+} from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins";
+
+// Short-lived — only needs to survive the Spotify OAuth round trip (redirect
+// out, provider does its thing, redirect back to our callback).
+const LOGIN_SLOT_COOKIE = "sonaraem_login_slot";
+const LOGIN_SLOT_COOKIE_MAX_AGE_SECONDS = 5 * 60;
+
+// databaseHooks' `after` context isn't exported as a standalone type from
+// better-auth/api — this is the minimal shape releaseLoginSlotIfHeld
+// actually needs from it (structurally satisfied by the real context).
+type CookieContext = {
+	getCookie: (name: string) => string | null;
+	setCookie: (
+		name: string,
+		value: string,
+		attributes?: Record<string, unknown>,
+	) => void;
+} | null;
 
 export type AuthVariant = "dashboard" | "admin";
 
@@ -109,6 +139,63 @@ async function clearReauthFlagIfNeeded(accountUserId: string): Promise<void> {
 	}
 }
 
+// Who is this Spotify sign-in for, and which email should be on the real
+// allowlist for it? Two cases: a first-time invite redemption (no account
+// yet — identify by the pre-collected waitlist spotifyEmail) or a returning
+// user reconnecting (an existing session — identify by their account email).
+// Returns null when neither applies, e.g. an organic visitor who was never
+// approved — nothing to gate, Spotify's own check runs as it does today.
+async function resolveLoginIdentity(
+	// Extracted from getSessionFromCtx's own signature rather than importing
+	// GenericEndpointContext directly — that type isn't re-exported from
+	// better-auth/api as a standalone name.
+	ctx: Parameters<typeof getSessionFromCtx>[0],
+): Promise<{ identity: AllowlistIdentity; email: string } | null> {
+	const inviteToken = ctx.getCookie("sonaraem_invite");
+	if (inviteToken) {
+		const invite = await getWaitlistInviteIdentity(inviteToken);
+		if (invite) {
+			return {
+				identity: { waitlistSignupId: invite.waitlistSignupId },
+				email: invite.spotifyEmail,
+			};
+		}
+	}
+
+	const session = await getSessionFromCtx(ctx);
+	if (session?.user?.email) {
+		return {
+			identity: { userId: session.user.id },
+			email: session.user.email,
+		};
+	}
+
+	return null;
+}
+
+// Reads the slot acquired by the before-hook (see hooks.before below) off
+// the cookie it set, releases it now that the sign-in has actually
+// completed, and clears the cookie either way.
+async function releaseLoginSlotIfHeld(context: CookieContext): Promise<void> {
+	if (!context) return;
+	const slotIdRaw = context.getCookie(LOGIN_SLOT_COOKIE);
+	if (!slotIdRaw) return;
+
+	const slotId = Number(slotIdRaw);
+	try {
+		if (Number.isFinite(slotId)) {
+			await releaseLoginSlot(slotId);
+		}
+	} catch (err) {
+		logger.error(
+			{ slotId, error: err instanceof Error ? err.message : String(err) },
+			"Failed to release the Spotify allowlist login slot after sign-in",
+		);
+	} finally {
+		context.setCookie(LOGIN_SLOT_COOKIE, "", { maxAge: 0, path: "/" });
+	}
+}
+
 const sharedUserFields = {
 	additionalFields: {
 		hasCompletedOnboarding: {
@@ -171,24 +258,71 @@ export function createDashboardAuth(
 					// just landed: clear any stale "needs reauth" state (#289) and
 					// check whether this account's email matches an approved,
 					// unredeemed waitlist entry (#298).
-					after: async (createdAccount) => {
+					after: async (createdAccount, context) => {
 						if (createdAccount.providerId !== "spotify") return;
 						await Promise.all([
 							clearReauthFlagIfNeeded(createdAccount.userId),
 							autoApproveIfWaitlisted(createdAccount.userId),
+							releaseLoginSlotIfHeld(context),
 						]);
 					},
 				},
 				update: {
-					after: async (updatedAccount) => {
+					after: async (updatedAccount, context) => {
 						if (updatedAccount.providerId !== "spotify") return;
 						await Promise.all([
 							clearReauthFlagIfNeeded(updatedAccount.userId),
 							autoApproveIfWaitlisted(updatedAccount.userId),
+							releaseLoginSlotIfHeld(context),
 						]);
 					},
 				},
 			},
+		},
+		hooks: {
+			// Top-level hooks.before is a single middleware run on every
+			// request (unlike a plugin's hooks, which can register several
+			// {matcher, handler} pairs) — so this checks the path itself.
+			before: createAuthMiddleware(async (ctx) => {
+				if (
+					ctx.path !== "/sign-in/social" ||
+					ctx.body?.provider !== "spotify"
+				) {
+					return;
+				}
+
+				const resolved = await resolveLoginIdentity(ctx);
+				// No resolvable identity (no invite cookie, no session) —
+				// nothing we can proactively gate. Let Spotify's own
+				// allowlist check run as it does today.
+				if (!resolved) return;
+
+				try {
+					const { slotId } = await acquireLoginSlot(
+						resolved.identity,
+						resolved.email,
+					);
+					ctx.setCookie(LOGIN_SLOT_COOKIE, String(slotId), {
+						httpOnly: true,
+						secure: !!envConfig.VERCEL,
+						sameSite: "lax",
+						maxAge: LOGIN_SLOT_COOKIE_MAX_AGE_SECONDS,
+						path: "/",
+					});
+				} catch (err) {
+					logger.error(
+						{
+							email: resolved.email,
+							error: err instanceof Error ? err.message : String(err),
+						},
+						"Failed to acquire a Spotify allowlist login slot",
+					);
+					throw new APIError("SERVICE_UNAVAILABLE", {
+						message:
+							"We couldn't prepare your Spotify connection — please try again in a moment.",
+					});
+				}
+			}),
 		},
 		user: sharedUserFields,
 		trustedOrigins: buildTrustedOriginsList(envConfig),

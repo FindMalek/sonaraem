@@ -2,6 +2,12 @@
 // name, also used for OTP codes (spotify-login-relay). Not renamed to avoid
 // unrelated churn on the crypto module's tested public API.
 export { decryptSessionState, encryptSessionState } from "./crypto";
+export type { AcquiredLoginSlot } from "./login-slot";
+export {
+	acquireLoginSlot,
+	LoginSlotError,
+	releaseLoginSlot,
+} from "./login-slot";
 export type {
 	AcquireSlotResult,
 	AllowlistIdentity,

@@ -1,6 +1,7 @@
 import { logger } from "@sonaraem/logger";
 import { schedules } from "@trigger.dev/sdk";
 
+import { LOGIN_OCCUPIED_TIMEOUT_MS } from "../../../constants/spotify-allowlist";
 import {
 	confirmReclaimed,
 	timeoutReclaim,
@@ -45,7 +46,14 @@ export const reclaimAllowlistSlotsTask = schedules.task({
 	id: "spotify-allowlist-reclaim-slots",
 	cron: "*/5 * * * *",
 	run: async () => {
-		const stuck = await timeoutReclaim();
+		// login only ever holds one slot for the span of one interactive
+		// sign-in — a stuck one blocks every other login behind it, so it
+		// gets a much shorter timeout than the background rotation pool.
+		const [rotationStuck, loginStuck] = await Promise.all([
+			timeoutReclaim(undefined, "rotation"),
+			timeoutReclaim(LOGIN_OCCUPIED_TIMEOUT_MS, "login"),
+		]);
+		const stuck = [...rotationStuck, ...loginStuck];
 		let recovered = 0;
 		for (const { slotId, email } of stuck) {
 			const removed = !email || (await removeStrandedEntry(email));

@@ -285,6 +285,7 @@ export type ReclaimedSlot = { slotId: number; email: string | null };
 // account past its 5-user cap.
 export async function timeoutReclaim(
 	timeoutMs: number = DEFAULT_OCCUPIED_TIMEOUT_MS,
+	kind?: AllowlistSlotKind,
 ): Promise<ReclaimedSlot[]> {
 	const cutoff = new Date(Date.now() - timeoutMs);
 	const now = new Date();
@@ -301,6 +302,7 @@ export async function timeoutReclaim(
 				and(
 					eq(spotifyAllowlistSlot.status, "occupied"),
 					lt(spotifyAllowlistSlot.occupiedAt, cutoff),
+					kind ? eq(spotifyAllowlistSlot.kind, kind) : undefined,
 				),
 			)
 			.returning({
