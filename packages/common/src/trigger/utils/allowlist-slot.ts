@@ -51,9 +51,7 @@ async function getUserEmail(userId: string): Promise<string> {
 	return row.email;
 }
 
-// A pipeline stage carries a runId (priority + cancellation come from that
-// run); a standalone caller like onboarding's sync just states its priority
-// directly and has no run to check cancellation against.
+// A pipeline stage's runId supplies priority + cancellation; a standalone caller states its priority directly and has nothing to cancel against.
 export type AllowlistSlotContext =
 	| { runId: number; priority?: undefined }
 	| { runId?: undefined; priority: "manual" | "cron" };
@@ -71,10 +69,7 @@ export async function withAllowlistSlot<T>(
 	const { requestId } = await enqueue({ userId }, priority);
 	const email = await getUserEmail(userId);
 
-	// pipeline.cancel only updates pipelineRun.status — Trigger.dev doesn't
-	// re-run checkCancelled on its own when wait.for resumes, so a cancelled
-	// run would otherwise sit here until it timed out instead of stopping.
-	// No-op for a runId-less caller, which has nothing to cancel against.
+	// wait.for doesn't re-check cancellation on its own, so poll it ourselves; a no-op when there's no run to check.
 	const checkRunCancelled = async () => {
 		if (context.runId !== undefined)
 			await checkCancelled(context.runId, userId);
