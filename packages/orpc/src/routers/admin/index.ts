@@ -1,7 +1,6 @@
 import { adminCostsRouter } from "./costs";
 import { adminFeedbackRouter } from "./feedback";
 import { adminSetupRouter } from "./setup";
-import { adminSpotifyAllowlistQueueRouter } from "./spotify-allowlist-queue";
 import { adminSpotifyLoginRelayRouter } from "./spotify-login-relay";
 import { adminStatsRouter } from "./stats";
 import { adminUsersRouter } from "./users";
@@ -15,7 +14,6 @@ export const adminRouter = {
 	costs: adminCostsRouter,
 	setup: adminSetupRouter,
 	spotifyLoginRelay: adminSpotifyLoginRelayRouter,
-	spotifyAllowlistQueue: adminSpotifyAllowlistQueueRouter,
 };
 
 export type AdminRouter = typeof adminRouter;

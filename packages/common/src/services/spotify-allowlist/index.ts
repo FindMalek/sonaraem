@@ -3,25 +3,14 @@
 // unrelated churn on the crypto module's tested public API.
 export { decryptSessionState, encryptSessionState } from "./crypto";
 export type {
-	AcquireSlotResult,
 	AllowlistIdentity,
-	AllowlistPriority,
-	AllowlistSlotKind,
-	EnqueueResult,
-	ReclaimedSlot,
-	RequestOutcome,
-} from "./queue";
+	EnsureAllowlistedResult,
+} from "./permanent-allowlist";
 export {
-	confirmReclaimed,
-	enqueue,
-	failActiveRequestForSlot,
-	nextEligibleForCron,
-	releaseSlot,
-	settleWaitingRequest,
-	timeoutReclaim,
-	tryAcquireSlot,
-	yieldCheck,
-} from "./queue";
+	AllowlistCapacityError,
+	ensureAllowlisted,
+	isIdentityAllowlisted,
+} from "./permanent-allowlist";
 export {
 	clearAllowlistSession,
 	getLastAllowlistWriteAt,

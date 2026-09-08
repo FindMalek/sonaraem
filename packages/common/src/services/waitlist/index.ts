@@ -1,1 +1,6 @@
-export { redeemWaitlistRow, tryAutoApproveByEmail } from "./redeem";
+export type { WaitlistInviteIdentity } from "./redeem";
+export {
+	getWaitlistInviteIdentity,
+	redeemWaitlistRow,
+	tryAutoApproveByEmail,
+} from "./redeem";

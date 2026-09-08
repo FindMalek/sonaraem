@@ -1,8 +1,36 @@
+import { createHash } from "node:crypto";
 import { db } from "@sonaraem/db";
 import { user } from "@sonaraem/db/schema/auth";
 import { waitlistSignup } from "@sonaraem/db/schema/waitlist-signup";
 import { logger } from "@sonaraem/logger";
 import { and, eq, isNull } from "drizzle-orm";
+
+const INVITE_TOKEN_REGEX = /^[0-9a-f]{64}$/;
+
+export type WaitlistInviteIdentity = {
+	waitlistSignupId: number;
+	spotifyEmail: string;
+};
+
+/** Resolves the raw sonaraem_invite cookie to its waitlist signup — used to gate the Spotify OAuth redirect before the user has an account (#392). */
+export async function getWaitlistInviteIdentity(
+	rawToken: string,
+): Promise<WaitlistInviteIdentity | null> {
+	if (!INVITE_TOKEN_REGEX.test(rawToken)) return null;
+
+	const hash = createHash("sha256").update(rawToken).digest("hex");
+	const [row] = await db
+		.select({
+			id: waitlistSignup.id,
+			spotifyEmail: waitlistSignup.spotifyEmail,
+		})
+		.from(waitlistSignup)
+		.where(eq(waitlistSignup.inviteToken, hash));
+
+	if (!row?.spotifyEmail) return null;
+
+	return { waitlistSignupId: row.id, spotifyEmail: row.spotifyEmail };
+}
 
 /**
  * Atomically marks a waitlist row redeemed by userId and approves that user.

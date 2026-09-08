@@ -6,8 +6,7 @@
 	"scripts": {
 		"build": "tsc --noEmit",
 		"test": "vitest run",
-		"bootstrap:spotify-allowlist-session": "tsx scripts/bootstrap-spotify-allowlist-session.ts",
-		"load-test:allowlist-queue": "tsx scripts/load-test-allowlist-queue.ts"
+		"bootstrap:spotify-allowlist-session": "tsx scripts/bootstrap-spotify-allowlist-session.ts"
 	},
 	"exports": {
 		".": {
@@ -87,9 +86,6 @@
 		},
 		"./trigger/tasks/spotify-allowlist/spike-dashboard-reach": {
 			"default": "./src/trigger/tasks/spotify-allowlist/spike-dashboard-reach.ts"
-		},
-		"./trigger/tasks/spotify-allowlist/reclaim-allowlist-slots": {
-			"default": "./src/trigger/tasks/spotify-allowlist/reclaim-allowlist-slots.ts"
 		},
 		"./trigger/tasks/spotify-allowlist/manage-allowlist-entry": {
 			"default": "./src/trigger/tasks/spotify-allowlist/manage-allowlist-entry.ts"
