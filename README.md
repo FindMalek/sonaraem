@@ -89,7 +89,7 @@ pnpm db:setup            # start local Postgres + push schema
 pnpm dev:api             # start API + Trigger.dev worker
 ```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full setup guide.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full dev setup guide, or [SELFHOST.md](./SELFHOST.md) if you're standing up your own production instance (Spotify app setup, the 5-user allowlist, deployment).
 
 ## Waitlist flow
 
@@ -139,13 +139,14 @@ pnpm check                # Biome
 All variables are prefixed `SONARAEM_` (server) or `NEXT_PUBLIC_SONARAEM_` (client). Copy `.env.example` and fill in:
 
 - `SONARAEM_DATABASE_URL` — local: `postgresql://postgres:password@localhost:5433/sonaraem`
-- `SONARAEM_SPOTIFY_CLIENT_ID` / `SONARAEM_SPOTIFY_CLIENT_SECRET` — Spotify Developer Dashboard
+- `SONARAEM_SPOTIFY_CLIENT_ID` / `SONARAEM_SPOTIFY_CLIENT_SECRET` — Spotify Developer Dashboard (one app, one client ID — Dev Mode caps it at 5 total accounts)
+- `SONARAEM_SPOTIFY_ALLOWLIST_SESSION_KEY` / `SONARAEM_SPOTIFY_ALLOWLIST_ADMIN_EMAIL` — the automation account that adds real users to Spotify's allowlist on first sign-in (see [SELFHOST.md](./SELFHOST.md))
 - `SONARAEM_RESEND_API_KEY` / `SONARAEM_EMAIL_FROM` — waitlist emails
 - `SONARAEM_OPENAI_API_KEY` — embeddings
 - `SONARAEM_GROQ_API_KEY` — LLM classification and playlist generation
 - `SONARAEM_TRIGGER_SECRET_KEY` / `SONARAEM_TRIGGER_PROJECT_REF` — [cloud.trigger.dev](https://cloud.trigger.dev)
 
-**Production note:** API rate limits are in-memory per process. Use Redis (or similar) before running multiple API instances.
+**Production note:** API rate limits are in-memory per process. Use Redis (or similar) before running multiple API instances. For a full self-hosting walkthrough, see [SELFHOST.md](./SELFHOST.md).
 
 ## Star History
 

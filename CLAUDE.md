@@ -24,3 +24,7 @@ Follow `.cursor/rules` (conventional prefixes). Do not put assistant, IDE, or ve
 - `pnpm db:studio` — Drizzle Studio against `SONARAEM_DATABASE_URL`.
 - `pnpm db:reset` — truncate user-data tables; keeps auth, `genre_domain`, and Drizzle migration history. Re-sync Spotify / re-run organize afterward.
 - `pnpm db:nuke` — Docker volume wipe + `db:push` (expects `localhost:5433`). See `.env.example` for override flags.
+
+## Self-hosting
+
+See [SELFHOST.md](./SELFHOST.md) for the full self-hosting guide, including a runbook aimed specifically at an AI agent doing first-time setup cold (what to ask the human operator for, what it can figure out itself, and common pitfalls around Spotify's Dev Mode 5-user allowlist cap).
