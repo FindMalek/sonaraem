@@ -36,7 +36,7 @@ export function OrganizeCompleteEmail({
 			? recipientName
 			: "there";
 	const playlistItems = Array.isArray(topPlaylists) ? topPlaylists : [];
-	const remainingPlaylists = playlistItems.length - 5;
+	const remainingPlaylists = playlistItems.length - 3;
 
 	return (
 		<EmailThemeProvider preview={<Preview>Your playlists are ready</Preview>}>
@@ -68,7 +68,7 @@ export function OrganizeCompleteEmail({
 					</Text>
 
 					{playlistItems.length > 0 &&
-						playlistItems.slice(0, 5).map((playlist, index) => (
+						playlistItems.slice(0, 3).map((playlist, index) => (
 							<Section
 								key={`${playlist.name}-${index}`}
 								className={`border-t border-solid py-[10px] ${themeClasses.border}`}

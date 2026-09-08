@@ -16,7 +16,7 @@ import {
 } from "@sonaraem/email/send";
 import { env } from "@sonaraem/env/server";
 import { logger } from "@sonaraem/logger";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
 import { markEmailDelivery, reserveEmailDelivery } from "./dedupe";
 import { evaluateEmailPolicy } from "./policy";
@@ -250,6 +250,11 @@ export async function sendOrganizeWeeklyDigestNotification({
 		return { ok: true, reason: "already_sent" as const };
 	}
 
+	const topCreatedPlaylists = createdPlaylists.slice(0, 3);
+	const trackCountById = await getPlaylistTrackCountsById(
+		topCreatedPlaylists.map((p) => p.id),
+	);
+
 	const result = await sendOrganizeWeeklyDigestEmail({
 		config,
 		to: userRow.email,
@@ -260,7 +265,10 @@ export async function sendOrganizeWeeklyDigestNotification({
 			createdCount: createdPlaylists.length,
 			updatedCount: updatedPlaylists,
 			tracksOrganized,
-			newPlaylistNames: createdPlaylists.map((p) => p.name),
+			newPlaylists: topCreatedPlaylists.map((p) => ({
+				name: p.name,
+				trackCount: trackCountById.get(p.id) ?? null,
+			})),
 		},
 	});
 
@@ -310,6 +318,19 @@ async function getRecentGeneratedPlaylists(userId: string) {
 		.where(and(eq(playlist.userId, userId), eq(playlist.isGenerated, true)))
 		.orderBy(desc(playlist.createdAt))
 		.limit(3);
+}
+
+async function getPlaylistTrackCountsById(playlistIds: number[]) {
+	if (playlistIds.length === 0) {
+		return new Map<number, number>();
+	}
+
+	const rows = await db
+		.select({ id: playlist.id, trackCount: playlist.trackCount })
+		.from(playlist)
+		.where(inArray(playlist.id, playlistIds));
+
+	return new Map(rows.map((row) => [row.id, row.trackCount]));
 }
 
 export async function sendWelcomeNotification({ userId }: { userId: string }) {

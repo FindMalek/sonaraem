@@ -21,7 +21,10 @@ export type OrganizeWeeklyDigestEmailProps = {
 	createdCount: number;
 	updatedCount: number;
 	tracksOrganized: number;
-	newPlaylistNames: string[];
+	newPlaylists: Array<{
+		name: string;
+		trackCount?: number | null;
+	}>;
 };
 
 export function OrganizeWeeklyDigestEmail({
@@ -30,7 +33,7 @@ export function OrganizeWeeklyDigestEmail({
 	createdCount,
 	updatedCount,
 	tracksOrganized,
-	newPlaylistNames = [],
+	newPlaylists = [],
 }: OrganizeWeeklyDigestEmailProps) {
 	const themeClasses = getEmailThemeClasses();
 	const lightStyles = getEmailInlineStyles("light");
@@ -72,9 +75,9 @@ export function OrganizeWeeklyDigestEmail({
 						organized.
 					</Text>
 
-					{newPlaylistNames.map((name, index) => (
+					{newPlaylists.map((playlist, index) => (
 						<Section
-							key={`${name}-${index}`}
+							key={`${playlist.name}-${index}`}
 							className={`border-t border-solid py-[10px] ${themeClasses.border}`}
 							style={{ borderColor: lightStyles.container.borderColor }}
 						>
@@ -82,7 +85,15 @@ export function OrganizeWeeklyDigestEmail({
 								className={`m-0 font-medium text-[14px] ${themeClasses.text}`}
 								style={{ color: lightStyles.text.color }}
 							>
-								{index + 1}. {name}
+								{index + 1}. {playlist.name}
+							</Text>
+							<Text
+								className={`m-0 mt-[4px] text-[12px] ${themeClasses.mutedText}`}
+								style={{ color: lightStyles.mutedText.color }}
+							>
+								{playlist.trackCount && playlist.trackCount > 0
+									? `${playlist.trackCount} tracks`
+									: "Ready to play"}
 							</Text>
 						</Section>
 					))}
@@ -104,7 +115,10 @@ OrganizeWeeklyDigestEmail.PreviewProps = {
 	createdCount: 2,
 	updatedCount: 4,
 	tracksOrganized: 156,
-	newPlaylistNames: ["Neon Night Drive", "Focused Flow"],
+	newPlaylists: [
+		{ name: "Neon Night Drive", trackCount: 24 },
+		{ name: "Focused Flow", trackCount: 18 },
+	],
 } satisfies OrganizeWeeklyDigestEmailProps;
 
 export default OrganizeWeeklyDigestEmail;
