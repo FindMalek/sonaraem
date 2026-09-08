@@ -3,7 +3,7 @@ import { db } from "@sonaraem/db";
 import { user } from "@sonaraem/db/schema/auth";
 import { waitlistSignup } from "@sonaraem/db/schema/waitlist-signup";
 import { logger } from "@sonaraem/logger";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 
 const INVITE_TOKEN_REGEX = /^[0-9a-f]{64}$/;
 
@@ -25,7 +25,14 @@ export async function getWaitlistInviteIdentity(
 			spotifyEmail: waitlistSignup.spotifyEmail,
 		})
 		.from(waitlistSignup)
-		.where(eq(waitlistSignup.inviteToken, hash));
+		.where(
+			and(
+				eq(waitlistSignup.inviteToken, hash),
+				eq(waitlistSignup.status, "approved"),
+				isNull(waitlistSignup.inviteRedeemedAt),
+				gt(waitlistSignup.inviteTokenExpiresAt, new Date()),
+			),
+		);
 
 	if (!row?.spotifyEmail) return null;
 

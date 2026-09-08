@@ -1,9 +1,11 @@
 import { db } from "@sonaraem/db";
+import { user } from "@sonaraem/db/schema/auth";
 import { pipelineRun } from "@sonaraem/db/schema/pipeline-run";
 import { userSpotifyLibraryStats } from "@sonaraem/db/schema/spotify";
+import { spotifyAllowlistEntry } from "@sonaraem/db/schema/spotify-allowlist";
 import { logger } from "@sonaraem/logger";
 import { schedules } from "@trigger.dev/sdk";
-import { and, eq, isNull, lt, or } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 import { updateRun } from "../../services/organize";
 import { organizePipeline } from "./organize";
@@ -14,13 +16,23 @@ const MAX_INSERT_ATTEMPTS = 3;
 const CRON_BATCH_SIZE = 100;
 const CRON_STALE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
-// Stale or never-synced, not needing reauth — no allowlist gating to check anymore (#392), a permanently allowlisted user is always allowlisted.
+// Stale or never-synced, not needing reauth, and matched to a real permanent-allowlist row by
+// email (#392) — needsReauth=false alone isn't sufficient: it can be true for an account that
+// reached Better Auth's Spotify link hooks without ever going through ensureAllowlisted (e.g. an
+// email Spotify's own dashboard already allowed for an unrelated reason, hitting /login with no
+// invite cookie and no session — see PR #394 review). Requiring the allowlist join keeps the cron
+// scoped to the users this app actually considers permanently allowlisted.
 async function nextEligibleForCron(batchSize: number): Promise<string[]> {
 	const staleCutoff = new Date(Date.now() - CRON_STALE_WINDOW_MS);
 
 	const rows = await db
 		.select({ userId: userSpotifyLibraryStats.userId })
 		.from(userSpotifyLibraryStats)
+		.innerJoin(user, eq(user.id, userSpotifyLibraryStats.userId))
+		.innerJoin(
+			spotifyAllowlistEntry,
+			sql`lower(${spotifyAllowlistEntry.email}) = lower(${user.email})`,
+		)
 		.where(
 			and(
 				or(

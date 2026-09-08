@@ -1,6 +1,6 @@
 import { db } from "@sonaraem/db";
 import { spotifyAllowlistEntry } from "@sonaraem/db/schema/spotify-allowlist";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { MAX_ALLOWLISTED_REAL_USERS } from "../../constants/spotify-allowlist";
 import { manageAllowlistEntryTask } from "../../trigger/tasks/spotify-allowlist/manage-allowlist-entry";
@@ -34,8 +34,12 @@ export async function isIdentityAllowlisted(email: string): Promise<boolean> {
  * Adds `email` to the real Spotify Dev Mode allowlist and records it as permanent — never removed (#392).
  * A no-op (no Spotify call) if the email is already on record. Throws AllowlistCapacityError before ever
  * calling Spotify once the 4 real-user seats are taken (the 5th is the admin-reserved seat, no row here).
- * The capacity check and insert aren't atomic — an accepted race for this app's scale (a handful of rare
- * sign-ins); the email-level unique index still prevents a duplicate row for the same email either way.
+ *
+ * The existing-email check, capacity check, and row insert all happen inside one Postgres transaction
+ * holding a session-wide advisory lock (`pg_advisory_xact_lock`), so two concurrent sign-ins can't both
+ * observe "count < N" before either commits — the second waits for the first's transaction to finish and
+ * then re-checks against the committed state. The lock auto-releases at transaction end, so it's never
+ * held across the slow, external Spotify dashboard automation call below.
  */
 export async function ensureAllowlisted(
 	identity: AllowlistIdentity,
@@ -44,39 +48,50 @@ export async function ensureAllowlisted(
 	const alreadyAllowlisted = await isIdentityAllowlisted(email);
 	if (alreadyAllowlisted) return { alreadyAllowlisted: true };
 
-	const [row] = await db
-		.select({ count: sql<number>`count(*)::int` })
-		.from(spotifyAllowlistEntry);
-	if ((row?.count ?? 0) >= MAX_ALLOWLISTED_REAL_USERS) {
-		throw new AllowlistCapacityError();
-	}
+	const reserved = await db.transaction(async (tx) => {
+		// Serializes every concurrent admission attempt through one lock — see the doc comment above.
+		await tx.execute(
+			sql`select pg_advisory_xact_lock(hashtext('sonaraem_spotify_allowlist_capacity'))`,
+		);
 
-	await manageAllowlistEntryTask
-		.triggerAndWait({ email, action: "add" })
-		.unwrap();
+		const [existing] = await tx
+			.select({ id: spotifyAllowlistEntry.id })
+			.from(spotifyAllowlistEntry)
+			.where(sql`lower(${spotifyAllowlistEntry.email}) = lower(${email})`);
+		if (existing) return null;
+
+		const [countRow] = await tx
+			.select({ count: sql<number>`count(*)::int` })
+			.from(spotifyAllowlistEntry);
+		if ((countRow?.count ?? 0) >= MAX_ALLOWLISTED_REAL_USERS) {
+			throw new AllowlistCapacityError();
+		}
+
+		const [insertedRow] = await tx
+			.insert(spotifyAllowlistEntry)
+			.values({
+				email: email.toLowerCase(),
+				userId: identity.userId ?? null,
+				waitlistSignupId: identity.waitlistSignupId ?? null,
+			})
+			.returning({ id: spotifyAllowlistEntry.id });
+		return insertedRow ?? null;
+	});
+
+	// null means a racing transaction already committed this email while we waited on the lock.
+	if (!reserved) return { alreadyAllowlisted: true };
 
 	try {
-		await db.insert(spotifyAllowlistEntry).values({
-			email: email.toLowerCase(),
-			userId: identity.userId ?? null,
-			waitlistSignupId: identity.waitlistSignupId ?? null,
-		});
+		await manageAllowlistEntryTask
+			.triggerAndWait({ email, action: "add" })
+			.unwrap();
 	} catch (err) {
-		// Unique-violation here means another request just won the same race — the email is allowlisted either way.
-		if (!isUniqueEmailConflict(err)) throw err;
+		// Don't leave a row claiming Spotify access that was never actually granted.
+		await db
+			.delete(spotifyAllowlistEntry)
+			.where(eq(spotifyAllowlistEntry.id, reserved.id));
+		throw err;
 	}
 
 	return { alreadyAllowlisted: false };
-}
-
-function isUniqueEmailConflict(err: unknown): boolean {
-	const asRecord = (v: unknown) =>
-		typeof v === "object" && v !== null
-			? (v as { code?: string; constraint?: string; cause?: unknown })
-			: undefined;
-	const isViolation = (r?: { code?: string; constraint?: string }) =>
-		r?.code === "23505" &&
-		r?.constraint === "spotify_allowlist_entry_email_unique";
-	const direct = asRecord(err);
-	return isViolation(direct) || isViolation(asRecord(direct?.cause));
 }

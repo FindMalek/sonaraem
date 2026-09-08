@@ -254,7 +254,8 @@ export function createDashboardAuth(
 					}
 					logger.error(
 						{
-							email: resolved.email,
+							userId: resolved.identity.userId,
+							waitlistSignupId: resolved.identity.waitlistSignupId,
 							error: err instanceof Error ? err.message : String(err),
 						},
 						"Failed to add email to the Spotify allowlist before OAuth redirect",
