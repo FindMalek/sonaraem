@@ -1,3 +1,13 @@
+// The shared root domain (last two labels, e.g. "sonaraem.com" from "api.sonaraem.com") two subdomains need to agree on to read each other's cookies — undefined for a bare host like "127.0.0.1" that has no real subdomain structure.
+export function deriveRootDomain(url: string): string | undefined {
+	try {
+		const parts = new URL(url).hostname.split(".");
+		return parts.length < 2 ? undefined : parts.slice(-2).join(".");
+	} catch {
+		return undefined;
+	}
+}
+
 // Supports wildcard patterns (e.g. *.vercel.app) in addition to exact matches.
 export function isOriginAllowed(
 	origin: string | null,

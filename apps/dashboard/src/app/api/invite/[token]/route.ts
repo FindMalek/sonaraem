@@ -1,4 +1,5 @@
 import { rateLimiters } from "@sonaraem/orpc/utils/rate-limiter";
+import { deriveRootDomain } from "@sonaraem/common/utils/origin";
 import type { Route } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -26,6 +27,11 @@ export async function GET(
 		redirect("/waiting?reason=invalid_invite" as Route);
 	}
 
+	// Without a domain, this cookie is host-only to wherever it's set (the dashboard app) and never reaches the API app's different subdomain, where the /sign-in/social allowlist gate actually reads it.
+	const domain = env.VERCEL
+		? deriveRootDomain(env.NEXT_PUBLIC_SONARAEM_API_URL)
+		: undefined;
+
 	const cookieStore = await cookies();
 	cookieStore.set("sonaraem_invite", token, {
 		httpOnly: true,
@@ -33,6 +39,7 @@ export async function GET(
 		sameSite: "lax", // lax: cookie sent on top-level nav (final OAuth redirect back to dashboard)
 		maxAge: COOKIE_MAX_AGE,
 		path: "/",
+		...(domain ? { domain } : {}),
 	});
 
 	redirect("/login");

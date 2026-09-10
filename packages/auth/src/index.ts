@@ -9,7 +9,7 @@ import {
 	tryAutoApproveByEmail,
 } from "@sonaraem/common/services/waitlist";
 import { sendWelcomeEmailTask } from "@sonaraem/common/trigger/tasks/emails/send-welcome";
-import { buildTrustedOrigins } from "@sonaraem/common/utils/origin";
+import { buildTrustedOrigins, deriveRootDomain } from "@sonaraem/common/utils/origin";
 import * as schema from "@sonaraem/db/schema/auth";
 import { logger } from "@sonaraem/logger";
 import { betterAuth } from "better-auth";
@@ -44,17 +44,8 @@ function buildCrossSubDomainCookies(envConfig: AuthEnvConfig) {
 	if (!envConfig.VERCEL) {
 		return undefined;
 	}
-	try {
-		const hostname = new URL(envConfig.NEXT_PUBLIC_SONARAEM_API_URL).hostname;
-		const parts = hostname.split(".");
-		if (parts.length < 2) {
-			return undefined;
-		}
-		const domain = parts.slice(-2).join(".");
-		return { enabled: true as const, domain };
-	} catch {
-		return undefined;
-	}
+	const domain = deriveRootDomain(envConfig.NEXT_PUBLIC_SONARAEM_API_URL);
+	return domain ? { enabled: true as const, domain } : undefined;
 }
 
 function buildAuthAdvanced(envConfig: AuthEnvConfig, variant: AuthVariant) {

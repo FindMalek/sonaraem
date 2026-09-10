@@ -11,6 +11,10 @@ export const dashboardEnv = createEnv({
 	extends: [dbEnv],
 	server: {
 		SONARAEM_SPOTIFY_CLIENT_ID: z.string().min(1),
+		VERCEL: z
+			.string()
+			.optional()
+			.transform((val) => val === "1"),
 		...observabilityModule.server,
 	},
 	client: {

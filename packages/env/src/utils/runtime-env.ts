@@ -31,6 +31,7 @@ export function createServerRuntimeEnv(): NodeJS.ProcessEnv {
  */
 export function createNextjsRuntimeEnv() {
 	return {
+		VERCEL: process.env.VERCEL,
 		SONARAEM_DATABASE_URL: process.env.SONARAEM_DATABASE_URL,
 		NEXT_PUBLIC_SONARAEM_NODE_ENV: process.env.NEXT_PUBLIC_SONARAEM_NODE_ENV,
 		NEXT_PUBLIC_SONARAEM_API_URL: getApiUrlFallback(),
