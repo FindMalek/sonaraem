@@ -38,11 +38,11 @@ function OtpRequestRow({ item }: { item: SpotifyOtpAdminItem }) {
 	const queryClient = useQueryClient();
 
 	const submit = useMutation(
-		orpc.admin.spotifyLoginRelay.submit.mutationOptions({
+		orpc.admin.spotify.loginRelay.submit.mutationOptions({
 			onSuccess: () => {
 				form.reset();
 				queryClient.invalidateQueries({
-					queryKey: orpc.admin.spotifyLoginRelay.key(),
+					queryKey: orpc.admin.spotify.loginRelay.key(),
 				});
 			},
 			onError: toastError,
@@ -124,7 +124,7 @@ function OtpRequestRow({ item }: { item: SpotifyOtpAdminItem }) {
 export function AdminSpotifyLoginRelayContent() {
 	// A pending request is time-bounded (~10 min), so this polls rather than requiring a manual refresh.
 	const { data, isFetching } = useQuery(
-		orpc.admin.spotifyLoginRelay.list.queryOptions({
+		orpc.admin.spotify.loginRelay.list.queryOptions({
 			refetchInterval: 10_000,
 		}),
 	);

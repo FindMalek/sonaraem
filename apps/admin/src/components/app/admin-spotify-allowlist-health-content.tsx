@@ -19,17 +19,17 @@ export function AdminSpotifyAllowlistHealthContent() {
 	const queryClient = useQueryClient();
 
 	const { data, isFetching } = useQuery(
-		orpc.admin.spotifyAllowlistHealth.get.queryOptions({
+		orpc.admin.spotify.health.get.queryOptions({
 			input: {},
 			refetchInterval: 30_000,
 		}),
 	);
 
 	const check = useMutation(
-		orpc.admin.spotifyAllowlistHealth.check.mutationOptions({
+		orpc.admin.spotify.health.check.mutationOptions({
 			onSuccess: () => {
 				queryClient.invalidateQueries({
-					queryKey: orpc.admin.spotifyAllowlistHealth.get.key(),
+					queryKey: orpc.admin.spotify.health.get.key(),
 				});
 			},
 			onError: toastError,

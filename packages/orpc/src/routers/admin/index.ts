@@ -1,8 +1,7 @@
 import { adminCostsRouter } from "./costs";
 import { adminFeedbackRouter } from "./feedback";
 import { adminSetupRouter } from "./setup";
-import { adminSpotifyAllowlistHealthRouter } from "./spotify-allowlist-health";
-import { adminSpotifyLoginRelayRouter } from "./spotify-login-relay";
+import { adminSpotifyRouter } from "./spotify";
 import { adminStatsRouter } from "./stats";
 import { adminUsersRouter } from "./users";
 import { adminWaitlistRouter } from "./waitlist";
@@ -14,8 +13,7 @@ export const adminRouter = {
 	users: adminUsersRouter,
 	costs: adminCostsRouter,
 	setup: adminSetupRouter,
-	spotifyLoginRelay: adminSpotifyLoginRelayRouter,
-	spotifyAllowlistHealth: adminSpotifyAllowlistHealthRouter,
+	spotify: adminSpotifyRouter,
 };
 
 export type AdminRouter = typeof adminRouter;
