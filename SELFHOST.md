@@ -29,7 +29,7 @@ cp .env.example .env
 4. **This is one app, one client ID — do not create a second one.** The app stays in Spotify's Dev Mode (not Extended Quota Mode), which caps it at 5 allowlisted accounts total.
 5. In the app's **Users and Access** settings, manually add the email of the account you want to use as the admin/dev seat, and set that same email as `SONARAEM_SPOTIFY_ALLOWLIST_ADMIN_EMAIL` in `.env`.
 
-The other 4 seats fill themselves in automatically: the app adds a user's Spotify email to the allowlist the moment they first sign in (`hooks.before` on `/sign-in/social`, see `packages/auth/src/index.ts`), and never removes it. A 5th real-user sign-in attempt is rejected with an app-level "at capacity" error before it ever reaches Spotify. This requires a one-time manual login to the automation account — see step 5.
+The other 4 seats fill themselves in automatically: during the organize pipeline's sync stage, the app durably queues the request for a free Spotify allowlist slot and adds the user's Spotify email once one opens up (`withAllowlistSlot`, see `packages/common/src/trigger/utils/allowlist-slot.ts`), and never removes it. If all 5 seats are already occupied, the request waits in that queue — polling for up to 20 minutes — before failing with `AllowlistSlotTimeoutError` ("Timed out waiting for a free Spotify allowlist slot") rather than being rejected instantly. This requires a one-time manual login to the automation account — see step 5.
 
 ## 3. Database
 
@@ -57,6 +57,12 @@ This is what runs the organize pipeline (sync → classify → embed → cluster
 
 ## 5. Seed the Spotify allowlist automation session
 
+First, seed the slot pool (3 rotation + 1 login row — without this the queue has nothing to hand out, so no real user's sign-in can ever get an allowlist slot). Idempotent, safe to re-run:
+
+```bash
+pnpm --filter @sonaraem/db run db:seed:spotify-allowlist-slots
+```
+
 The one-time real adds to the Spotify allowlist are done by a headless browser driving the Developer Dashboard UI (there's no public API for it). It needs a logged-in session for the admin/automation account once:
 
 ```bash
@@ -82,7 +88,7 @@ pnpm dev:ada   # API + dashboard + admin + Trigger.dev worker, ports 3002/3003/3
 
 Sign in to the admin app at `http://127.0.0.1:3004/login` with `admin@sonaraem.com` / `changeme123!` (from `pnpm db:seed` — change this before deploying anywhere real: it's a hardcoded local-only credential, see `packages/db/scripts/seed-admin.ts`). Approve yourself on the waitlist (or sign in directly if already approved) and connect Spotify from the dashboard at `http://127.0.0.1:3003`.
 
-**Production:** each app under `apps/` (`web`, `dashboard`, `admin`, `api`, `email`) is an independent Next.js app with its own `vercel.json` — deploy them as four separate Vercel projects (or any Node hosting that runs `next build && next start`), pointing each app's `NEXT_PUBLIC_SONARAEM_*_URL` env vars at its real deployed URL. `pnpm build` builds all of them. API rate limiting is in-memory per process — put a shared store (Redis or similar) in front of it before running more than one API instance.
+**Production:** each app under `apps/` (`web`, `dashboard`, `admin`, `api`, `email`) is an independent Next.js app — deploy them as five separate Vercel projects (`api`, `dashboard`, and `email` ship a `vercel.json` with a `turbo-ignore` build guard; `web` and `admin` deploy with Vercel's zero-config Next.js defaults) or any Node hosting that runs `next build && next start`, pointing each app's `NEXT_PUBLIC_SONARAEM_*_URL` env vars at its real deployed URL. `pnpm build` builds all of them. API rate limiting is in-memory per process — put a shared store (Redis or similar) in front of it before running more than one API instance.
 
 ## Environment variable reference
 
@@ -112,10 +118,10 @@ If you're an agent setting this up cold, in order:
    - Spotify Developer app Client ID/Secret, and which email should be the admin/allowlist-admin seat (or offer to walk them through creating the app per step 2 above — you cannot create a Spotify Developer app yourself, it requires their Spotify login)
    - Resend API key + verified sender address (or confirm it's fine to leave email disabled for now)
    - Trigger.dev project ref + secret key (or confirm background jobs/the weekly digest can stay off for now)
-2. **You can figure out yourself, no need to ask**: `pnpm install`, `.env` scaffolding from `.env.example`, generating `SONARAEM_BETTER_AUTH_SECRET` and `SONARAEM_SPOTIFY_ALLOWLIST_SESSION_KEY` (`openssl rand -base64 32`), starting Docker Postgres, running migrations/`db:push`, running `pnpm db:seed`, running `pnpm build`/`pnpm test`/`pnpm dev:*` to verify things work.
+2. **You can figure out yourself, no need to ask**: `pnpm install`, `.env` scaffolding from `.env.example`, generating `SONARAEM_BETTER_AUTH_SECRET` and `SONARAEM_SPOTIFY_ALLOWLIST_SESSION_KEY` (`openssl rand -base64 32`), starting Docker Postgres, running migrations/`db:push`, running `pnpm db:seed` and `pnpm --filter @sonaraem/db run db:seed:spotify-allowlist-slots`, running `pnpm build`/`pnpm test`/`pnpm dev:*` to verify things work.
 3. **Do not attempt to automate the Spotify allowlist seeding step (step 5 above)** — it requires a human to complete a real Spotify login (and possibly an email OTP) in an interactive browser window. Tell the operator to run `pnpm --filter @sonaraem/common run bootstrap:spotify-allowlist-session` themselves; don't try to script around it.
 4. **Common pitfalls**:
-   - Forgetting the Dev Mode 5-user cap: OAuth sign-in for a 5th real user will fail loudly with an app-level "at capacity" message — this is expected, not a bug, until the app is granted Spotify Extended Quota Mode (out of scope for a self-host setup).
+   - Forgetting the Dev Mode 5-user cap: with all 5 seats occupied, a new real user's organize run queues for a free allowlist slot and, after up to 20 minutes of polling, fails with `AllowlistSlotTimeoutError` — this is expected, not a bug, until the app is granted Spotify Extended Quota Mode (out of scope for a self-host setup).
    - A missing/expired allowlist automation session surfaces as "No saved Spotify allowlist session" or "Saved session didn't reach the Users table" in logs on the very first real sign-in attempt — re-run step 5.
    - `browserType.launch: Executable doesn't exist` means `playwright install chromium` (step 5) was skipped.
    - Do not create a second Spotify app/client ID to try to get more capacity — the app is built around exactly one.
