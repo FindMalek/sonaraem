@@ -2,7 +2,7 @@ import { env } from "@sonaraem/env/server";
 import { logger } from "@sonaraem/logger";
 import type { Queue } from "@trigger.dev/sdk";
 import { queue, task, wait } from "@trigger.dev/sdk";
-import { chromium } from "playwright";
+import type { Browser } from "playwright";
 
 import { DEFAULT_ALLOWLIST_WRITE_GAP_MS } from "../../../constants/spotify-allowlist";
 import {
@@ -83,7 +83,10 @@ export const manageAllowlistEntryTask = task({
 			throw missingSessionErr;
 		}
 
-		let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
+		// Dynamic, not top-level: a static `import "playwright"` gets bundled into the Vercel function that just calls .triggerAndWait() (never executes this run() body) and crashes there on its missing native browsers.json — this way it only loads where run() actually executes, on Trigger.dev's own infra.
+		const { chromium } = await import("playwright");
+
+		let browser: Browser | undefined;
 		try {
 			browser = await chromium.launch({ headless: true });
 			const context = await browser.newContext({
