@@ -2,7 +2,7 @@ import type { Page } from "playwright";
 
 const TABLE_SELECTOR = 'table[data-encore-id="table"]';
 
-export async function scrapeAllowlistEmails(page: Page): Promise<string[]> {
+async function readAllowlistEmailsOnce(page: Page): Promise<string[]> {
 	const rows = page.locator(`${TABLE_SELECTOR} tbody tr`);
 	const count = await rows.count();
 	const emails: string[] = [];
@@ -11,6 +11,16 @@ export async function scrapeAllowlistEmails(page: Page): Promise<string[]> {
 		emails.push(email.trim().toLowerCase());
 	}
 	return emails;
+}
+
+// Spotify re-fetches and re-renders the table asynchronously after an add/remove dialog closes — scraping immediately can catch it mid-refresh (an empty or stale table), indistinguishable from a real failure. Retries a few times before accepting an empty result as real.
+export async function scrapeAllowlistEmails(page: Page): Promise<string[]> {
+	for (let attempt = 0; attempt < 4; attempt++) {
+		const emails = await readAllowlistEmailsOnce(page);
+		if (emails.length > 0 || attempt === 3) return emails;
+		await page.waitForTimeout(750);
+	}
+	return [];
 }
 
 // "Full Name" has no visible `required` attribute, but we fill it anyway to be safe — the local part of the email is a fine placeholder.
