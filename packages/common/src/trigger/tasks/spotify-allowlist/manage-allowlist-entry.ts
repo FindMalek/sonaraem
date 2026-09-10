@@ -8,6 +8,7 @@ import { DEFAULT_ALLOWLIST_WRITE_GAP_MS } from "../../../constants/spotify-allow
 import {
 	getLastAllowlistWriteAt,
 	loadAllowlistSession,
+	recordAllowlistCheckResult,
 	recordAllowlistWriteNow,
 	saveAllowlistSession,
 } from "../../../services/spotify-allowlist";
@@ -132,18 +133,68 @@ export const manageAllowlistEntryTask = task({
 
 			const refreshedState = await context.storageState();
 			await saveAllowlistSession(JSON.stringify(refreshedState));
+			await recordAllowlistCheckResult(null);
 
 			return { confirmed: true };
 		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : String(err);
 			logger.error(
-				{
-					email,
-					action,
-					error: err instanceof Error ? err.message : String(err),
-				},
+				{ email, action, error: errorMessage },
 				"Spotify allowlist automation failed",
 			);
+			await recordAllowlistCheckResult(errorMessage);
 			await alertAdmin(email, action, err);
+			throw err;
+		} finally {
+			await browser?.close();
+		}
+	},
+});
+
+// On-demand "does the saved session actually still work" check — no add/remove, so the admin dashboard can offer a test button without needing a real pending signup. Shares the automation queue so it can't race a real add/remove for the one browser session.
+export const checkAllowlistSessionTask = task({
+	id: "spotify-allowlist-check-session",
+	queue: allowlistAutomationQueue,
+	retry: { maxAttempts: 1 },
+	run: async (): Promise<{ ok: boolean }> => {
+		const sessionState = await loadAllowlistSession();
+		if (!sessionState) {
+			throw new AllowlistAutomationError(
+				"No saved Spotify allowlist session - log in manually once to seed one (login automation isn't built yet)",
+			);
+		}
+
+		const { chromium } = await import("playwright");
+		let browser: Browser | undefined;
+		try {
+			browser = await chromium.launch({ headless: true });
+			const context = await browser.newContext({
+				storageState: JSON.parse(sessionState),
+			});
+			const page = await context.newPage();
+
+			await page.goto(USERS_URL(), { waitUntil: "domcontentloaded" });
+			const reachedTable = await page
+				.locator('table[data-encore-id="table"]')
+				.waitFor({ state: "visible", timeout: 15_000 })
+				.then(() => true)
+				.catch(() => false);
+
+			if (!reachedTable) {
+				throw new AllowlistAutomationError(
+					"Saved session didn't reach the Users table — it's likely expired (login automation isn't built yet)",
+				);
+			}
+
+			await recordAllowlistCheckResult(null);
+			return { ok: true };
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : String(err);
+			logger.error(
+				{ error: errorMessage },
+				"Spotify allowlist session check failed",
+			);
+			await recordAllowlistCheckResult(errorMessage);
 			throw err;
 		} finally {
 			await browser?.close();

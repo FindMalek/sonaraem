@@ -64,6 +64,9 @@ export const spotifyAllowlistSession = pgTable("spotify_allowlist_session", {
 	// they don't come in bursts across slots. Plaintext; not part of the
 	// encrypted session state.
 	lastWriteAt: timestamp("last_write_at"),
+	// Set on every real automation attempt (add/remove or a standalone health check) — null lastError means the last attempt succeeded.
+	lastCheckedAt: timestamp("last_checked_at"),
+	lastError: text("last_error"),
 	updatedAt: timestamp("updated_at")
 		.defaultNow()
 		.$onUpdate(() => new Date())
