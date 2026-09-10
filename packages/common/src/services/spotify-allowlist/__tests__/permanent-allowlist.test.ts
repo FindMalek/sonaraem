@@ -18,8 +18,7 @@ const { db: dbMock, resultsQueue } = vi.hoisted(() => {
 		if (next instanceof Error) return Promise.reject(next);
 		return Promise.resolve(next);
 	}
-	// Same chain-backed mock for both the outer db and the tx handed to db.transaction's callback —
-	// the transaction is just a serialization boundary here, not a separate connection.
+	// Same chain-backed mock for both the outer db and the tx handed to db.transaction's callback — the transaction is just a serialization boundary here, not a separate connection.
 	const txLike = {
 		select: () => chain(),
 		insert: () => chain(),
@@ -109,8 +108,7 @@ describe("permanent allowlist", () => {
 	});
 
 	it("treats a concurrent duplicate as already-allowlisted, not an error", async () => {
-		// The advisory lock serializes racing callers — by the time the second one gets the lock,
-		// the first's row is already committed, so the existing-by-email check inside the tx finds it.
+		// The advisory lock serializes racing callers — by the time the second one gets the lock, the first's row is already committed, so the existing-by-email check inside the tx finds it.
 		push([], undefined, [{ id: 9 }]);
 
 		await expect(
