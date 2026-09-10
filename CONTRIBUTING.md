@@ -89,7 +89,7 @@ pnpm db:ops:generate my-fix   # scaffold a db-ops data migration
 pnpm db:ops:migrate           # run pending db-ops migrations (local + prod CI)
 pnpm db:ops:migrate --dry-run --only my-fix      # test without writes (point .env at target DB)
 pnpm db:ops:status            # show db-ops ledger vs files
-pnpm db:seed        # seed local admin user (requires SONARAEM_ADMIN_PASSWORD)
+pnpm db:seed        # seed local admin user (admin@sonaraem.com / changeme123!, hardcoded — local dev only)
 ```
 
 ## Waitlist & Access Control
