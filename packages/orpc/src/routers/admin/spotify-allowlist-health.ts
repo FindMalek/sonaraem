@@ -6,6 +6,7 @@ import {
 import { getAllowlistSessionHealth } from "@sonaraem/common/services/spotify-allowlist";
 import { checkAllowlistSessionTask } from "@sonaraem/common/trigger/tasks/spotify-allowlist/manage-allowlist-entry";
 import { logger } from "@sonaraem/logger";
+import { runs } from "@trigger.dev/sdk";
 import { adminProcedure } from "../../procedures";
 
 export const adminSpotifyAllowlistHealthRouter = {
@@ -16,19 +17,20 @@ export const adminSpotifyAllowlistHealthRouter = {
 			return await getAllowlistSessionHealth();
 		}),
 
-	// Actually runs the browser check now, rather than just reading the last-recorded result — for "is this working right now" rather than "was this working last time someone signed up".
+	// Actually runs the browser check now, rather than just reading the last-recorded result — for "is this working right now" rather than "was this working last time someone signed up". triggerAndWait only works inside a task's own run(), so this is a plain admin route: trigger + poll instead.
 	check: adminProcedure
 		.input(emptyInput)
 		.output(spotifyAllowlistCheckOutputSchema)
 		.handler(async () => {
-			const result = await checkAllowlistSessionTask.triggerAndWait();
-			if (!result.ok) {
+			const handle = await checkAllowlistSessionTask.trigger();
+			const result = await runs.poll(handle);
+			if (!result.isSuccess) {
 				logger.warn(
 					{ error: result.error },
 					"Manual Spotify allowlist session check failed",
 				);
 				return { ok: false };
 			}
-			return result.output;
+			return result.output ?? { ok: true };
 		}),
 };
