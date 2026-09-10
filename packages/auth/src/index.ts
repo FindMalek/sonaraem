@@ -9,7 +9,10 @@ import {
 	tryAutoApproveByEmail,
 } from "@sonaraem/common/services/waitlist";
 import { sendWelcomeEmailTask } from "@sonaraem/common/trigger/tasks/emails/send-welcome";
-import { buildTrustedOrigins, deriveRootDomain } from "@sonaraem/common/utils/origin";
+import {
+	buildTrustedOrigins,
+	deriveRootDomain,
+} from "@sonaraem/common/utils/origin";
 import * as schema from "@sonaraem/db/schema/auth";
 import { logger } from "@sonaraem/logger";
 import { betterAuth } from "better-auth";
