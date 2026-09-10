@@ -295,6 +295,20 @@
 			"when": 1788765593333,
 			"tag": "0041_stiff_ronan",
 			"breakpoints": true
+		},
+		{
+			"idx": 42,
+			"version": "7",
+			"when": 1788850198623,
+			"tag": "0042_military_domino",
+			"breakpoints": true
+		},
+		{
+			"idx": 43,
+			"version": "7",
+			"when": 1788850227745,
+			"tag": "0043_pale_hellcat",
+			"breakpoints": true
 		}
 	]
 }

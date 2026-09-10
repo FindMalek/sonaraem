@@ -21,8 +21,7 @@
 		"db:reset:all": "tsx scripts/db-reset.ts --all",
 		"db:reset:embeddings": "tsx scripts/reset-embeddings.ts",
 		"db:nuke": "node scripts/db-nuke.mjs",
-		"db:seed": "tsx scripts/seed-admin.ts",
-		"db:seed:spotify-allowlist-slots": "tsx scripts/seed-spotify-allowlist-slots.ts"
+		"db:seed": "tsx scripts/seed-admin.ts"
 	},
 	"dependencies": {
 		"@neondatabase/serverless": "^1.1.0",

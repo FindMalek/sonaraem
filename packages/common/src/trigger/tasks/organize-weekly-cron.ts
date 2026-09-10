@@ -1,17 +1,46 @@
 import { db } from "@sonaraem/db";
+import { user } from "@sonaraem/db/schema/auth";
 import { pipelineRun } from "@sonaraem/db/schema/pipeline-run";
+import { userSpotifyLibraryStats } from "@sonaraem/db/schema/spotify";
+import { spotifyAllowlistEntry } from "@sonaraem/db/schema/spotify-allowlist";
 import { logger } from "@sonaraem/logger";
 import { schedules } from "@trigger.dev/sdk";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 import { updateRun } from "../../services/organize";
-import { nextEligibleForCron } from "../../services/spotify-allowlist";
 import { organizePipeline } from "./organize";
 
 const RUNNING_CONSTRAINT_NAME = "pipeline_run_one_running_per_user";
 const MAX_INSERT_ATTEMPTS = 3;
-// Bounds the query — far more than the realistic weekly count under the allowlist pool (#290).
+// Bounds the query — far more than the realistic weekly count for a fixed 4-user allowlist (#392).
 const CRON_BATCH_SIZE = 100;
+const CRON_STALE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+
+// Stale or never-synced, not needing reauth, and matched to a real permanent-allowlist row by email (#392) — needsReauth=false alone isn't sufficient, since it can be true for an account that reached the Spotify link hooks without ever going through ensureAllowlisted (see PR #394 review).
+async function nextEligibleForCron(batchSize: number): Promise<string[]> {
+	const staleCutoff = new Date(Date.now() - CRON_STALE_WINDOW_MS);
+
+	const rows = await db
+		.select({ userId: userSpotifyLibraryStats.userId })
+		.from(userSpotifyLibraryStats)
+		.innerJoin(user, eq(user.id, userSpotifyLibraryStats.userId))
+		.innerJoin(
+			spotifyAllowlistEntry,
+			sql`lower(${spotifyAllowlistEntry.email}) = lower(${user.email})`,
+		)
+		.where(
+			and(
+				or(
+					isNull(userSpotifyLibraryStats.lastFullSyncAt),
+					lt(userSpotifyLibraryStats.lastFullSyncAt, staleCutoff),
+				),
+				eq(userSpotifyLibraryStats.needsReauth, false),
+			),
+		)
+		.limit(batchSize);
+
+	return rows.map((r) => r.userId);
+}
 
 function isAlreadyRunningConflict(err: unknown): boolean {
 	if (typeof err !== "object" || err === null) return false;
@@ -75,7 +104,6 @@ export type OrganizeAllUsersResult = {
 };
 
 // triggeredBy: "cron" is what makes send-organize-complete.ts send the weekly digest email.
-// Fairness vs. a concurrent manual request isn't handled here — tryAcquireSlot re-checks front-of-queue per poll.
 export async function runOrganizeForAllUsers(): Promise<
 	OrganizeAllUsersResult[]
 > {

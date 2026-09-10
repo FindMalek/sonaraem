@@ -1,11 +1,24 @@
 import { clearSpotifyNeedsReauth } from "@sonaraem/common/services/music";
-import { tryAutoApproveByEmail } from "@sonaraem/common/services/waitlist";
+import {
+	AllowlistCapacityError,
+	type AllowlistIdentity,
+	ensureAllowlisted,
+} from "@sonaraem/common/services/spotify-allowlist";
+import {
+	getWaitlistInviteIdentity,
+	tryAutoApproveByEmail,
+} from "@sonaraem/common/services/waitlist";
 import { sendWelcomeEmailTask } from "@sonaraem/common/trigger/tasks/emails/send-welcome";
 import { buildTrustedOrigins } from "@sonaraem/common/utils/origin";
 import * as schema from "@sonaraem/db/schema/auth";
 import { logger } from "@sonaraem/logger";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import {
+	APIError,
+	createAuthMiddleware,
+	getSessionFromCtx,
+} from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { admin } from "better-auth/plugins";
 
@@ -109,6 +122,32 @@ async function clearReauthFlagIfNeeded(accountUserId: string): Promise<void> {
 	}
 }
 
+/** Identifies who's signing in (invite cookie for a first-timer, session for a reconnect) and which email to gate — null if neither resolves (an unrelated visitor hitting /login directly). */
+async function resolveLoginIdentity(
+	ctx: Parameters<typeof getSessionFromCtx>[0],
+): Promise<{ identity: AllowlistIdentity; email: string } | null> {
+	const inviteToken = ctx.getCookie("sonaraem_invite");
+	if (inviteToken) {
+		const invite = await getWaitlistInviteIdentity(inviteToken);
+		if (invite) {
+			return {
+				identity: { waitlistSignupId: invite.waitlistSignupId },
+				email: invite.spotifyEmail,
+			};
+		}
+	}
+
+	const session = await getSessionFromCtx(ctx);
+	if (session?.user?.email) {
+		return {
+			identity: { userId: session.user.id },
+			email: session.user.email,
+		};
+	}
+
+	return null;
+}
+
 const sharedUserFields = {
 	additionalFields: {
 		hasCompletedOnboarding: {
@@ -190,6 +229,44 @@ export function createDashboardAuth(
 				},
 			},
 		},
+		hooks: {
+			// One middleware run per request (unlike a plugin's hooks) — checks the path itself.
+			before: createAuthMiddleware(async (ctx) => {
+				if (
+					ctx.path !== "/sign-in/social" ||
+					ctx.body?.provider !== "spotify"
+				) {
+					return;
+				}
+
+				const resolved = await resolveLoginIdentity(ctx);
+				// No resolvable identity — nothing to gate, Spotify's own check runs as today.
+				if (!resolved) return;
+
+				try {
+					await ensureAllowlisted(resolved.identity, resolved.email);
+				} catch (err) {
+					if (err instanceof AllowlistCapacityError) {
+						throw new APIError("FORBIDDEN", {
+							message:
+								"Sonaraem is at capacity right now — no new Spotify connections can be added. Try again later.",
+						});
+					}
+					logger.error(
+						{
+							userId: resolved.identity.userId,
+							waitlistSignupId: resolved.identity.waitlistSignupId,
+							error: err instanceof Error ? err.message : String(err),
+						},
+						"Failed to add email to the Spotify allowlist before OAuth redirect",
+					);
+					throw new APIError("SERVICE_UNAVAILABLE", {
+						message:
+							"We couldn't prepare your Spotify connection — please try again in a moment.",
+					});
+				}
+			}),
+		},
 		user: sharedUserFields,
 		trustedOrigins: buildTrustedOriginsList(envConfig),
 		emailAndPassword: {
@@ -214,7 +291,8 @@ export function createDashboardAuth(
 						},
 					}
 				: {},
-		plugins: [nextCookies(), admin({ defaultRole: "user" })],
+		// nextCookies must be last — it flushes the cookie jar into real Set-Cookie headers, so anything after it silently loses its cookie writes.
+		plugins: [admin({ defaultRole: "user" }), nextCookies()],
 	});
 }
 
@@ -242,7 +320,8 @@ export function createAdminAuth(
 			disableSignUp: true,
 		},
 		socialProviders: {},
-		plugins: [nextCookies(), admin({ defaultRole: "user" })],
+		// nextCookies must be last — see the note in createDashboardAuth.
+		plugins: [admin({ defaultRole: "user" }), nextCookies()],
 	});
 }
 
