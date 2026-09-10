@@ -57,3 +57,42 @@ export async function recordAllowlistWriteNow(): Promise<void> {
 		.set({ lastWriteAt: new Date() })
 		.where(eq(spotifyAllowlistSession.id, SESSION_ROW_ID));
 }
+
+// Called after every real automation attempt (add/remove or a standalone health check) — pass null on success, or the error message on failure. Lets the admin dashboard show "is this actually working" without ever needing to launch Playwright itself.
+export async function recordAllowlistCheckResult(
+	error: string | null,
+): Promise<void> {
+	await db
+		.update(spotifyAllowlistSession)
+		.set({ lastCheckedAt: new Date(), lastError: error })
+		.where(eq(spotifyAllowlistSession.id, SESSION_ROW_ID));
+}
+
+export type AllowlistSessionHealth = {
+	hasSession: boolean;
+	lastWriteAt: Date | null;
+	lastCheckedAt: Date | null;
+	lastError: string | null;
+};
+
+export async function getAllowlistSessionHealth(): Promise<AllowlistSessionHealth> {
+	const [row] = await db
+		.select({
+			lastWriteAt: spotifyAllowlistSession.lastWriteAt,
+			lastCheckedAt: spotifyAllowlistSession.lastCheckedAt,
+			lastError: spotifyAllowlistSession.lastError,
+		})
+		.from(spotifyAllowlistSession)
+		.where(eq(spotifyAllowlistSession.id, SESSION_ROW_ID));
+
+	if (!row) {
+		return {
+			hasSession: false,
+			lastWriteAt: null,
+			lastCheckedAt: null,
+			lastError: null,
+		};
+	}
+
+	return { hasSession: true, ...row };
+}

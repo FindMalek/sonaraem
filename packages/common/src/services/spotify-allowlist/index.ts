@@ -11,10 +11,13 @@ export {
 	ensureAllowlisted,
 	isIdentityAllowlisted,
 } from "./permanent-allowlist";
+export type { AllowlistSessionHealth } from "./session";
 export {
 	clearAllowlistSession,
+	getAllowlistSessionHealth,
 	getLastAllowlistWriteAt,
 	loadAllowlistSession,
+	recordAllowlistCheckResult,
 	recordAllowlistWriteNow,
 	saveAllowlistSession,
 } from "./session";
