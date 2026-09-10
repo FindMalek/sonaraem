@@ -55,7 +55,9 @@ export function AdminSpotifyAllowlistHealthContent() {
 		? { label: "Not configured", variant: "destructive" as const }
 		: data.lastError
 			? { label: "Broken", variant: "destructive" as const }
-			: { label: "OK", variant: "default" as const };
+			: !data.lastCheckedAt
+				? { label: "Not checked yet", variant: "secondary" as const }
+				: { label: "OK", variant: "default" as const };
 
 	return (
 		<Card>

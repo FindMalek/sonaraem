@@ -64,6 +64,20 @@ async function alertAdmin(
 	}
 }
 
+// Best-effort: a health-tracking write failure must never replace or mask the real automation outcome it's recording.
+async function safeRecordAllowlistCheckResult(
+	error: string | null,
+): Promise<void> {
+	try {
+		await recordAllowlistCheckResult(error);
+	} catch (recordErr) {
+		logger.error(
+			{ recordErr },
+			"Failed to record Spotify allowlist check result",
+		);
+	}
+}
+
 export const manageAllowlistEntryTask = task({
 	id: "spotify-allowlist-manage-entry",
 	queue: allowlistAutomationQueue,
@@ -75,20 +89,17 @@ export const manageAllowlistEntryTask = task({
 		email: string;
 		action: "add" | "remove";
 	}) => {
-		const sessionState = await loadAllowlistSession();
-		if (!sessionState) {
-			const missingSessionErr = new AllowlistAutomationError(
-				"No saved Spotify allowlist session - log in manually once to seed one (login automation isn't built yet)",
-			);
-			await alertAdmin(email, action, missingSessionErr);
-			throw missingSessionErr;
-		}
-
-		// Dynamic, not top-level: a static `import "playwright"` gets bundled into the Vercel function that just calls .triggerAndWait() (never executes this run() body) and crashes there on its missing native browsers.json — this way it only loads where run() actually executes, on Trigger.dev's own infra.
-		const { chromium } = await import("playwright");
-
 		let browser: Browser | undefined;
 		try {
+			const sessionState = await loadAllowlistSession();
+			if (!sessionState) {
+				throw new AllowlistAutomationError(
+					"No saved Spotify allowlist session - log in manually once to seed one (login automation isn't built yet)",
+				);
+			}
+
+			// Dynamic, not top-level: a static `import "playwright"` gets bundled into the Vercel function that just calls .triggerAndWait() (never executes this run() body) and crashes there on its missing native browsers.json — this way it only loads where run() actually executes, on Trigger.dev's own infra.
+			const { chromium } = await import("playwright");
 			browser = await chromium.launch({ headless: true });
 			const context = await browser.newContext({
 				storageState: JSON.parse(sessionState),
@@ -133,7 +144,7 @@ export const manageAllowlistEntryTask = task({
 
 			const refreshedState = await context.storageState();
 			await saveAllowlistSession(JSON.stringify(refreshedState));
-			await recordAllowlistCheckResult(null);
+			await safeRecordAllowlistCheckResult(null);
 
 			return { confirmed: true };
 		} catch (err) {
@@ -142,7 +153,7 @@ export const manageAllowlistEntryTask = task({
 				{ email, action, error: errorMessage },
 				"Spotify allowlist automation failed",
 			);
-			await recordAllowlistCheckResult(errorMessage);
+			await safeRecordAllowlistCheckResult(errorMessage);
 			await alertAdmin(email, action, err);
 			throw err;
 		} finally {
@@ -157,16 +168,16 @@ export const checkAllowlistSessionTask = task({
 	queue: allowlistAutomationQueue,
 	retry: { maxAttempts: 1 },
 	run: async (): Promise<{ ok: boolean }> => {
-		const sessionState = await loadAllowlistSession();
-		if (!sessionState) {
-			throw new AllowlistAutomationError(
-				"No saved Spotify allowlist session - log in manually once to seed one (login automation isn't built yet)",
-			);
-		}
-
-		const { chromium } = await import("playwright");
 		let browser: Browser | undefined;
 		try {
+			const sessionState = await loadAllowlistSession();
+			if (!sessionState) {
+				throw new AllowlistAutomationError(
+					"No saved Spotify allowlist session - log in manually once to seed one (login automation isn't built yet)",
+				);
+			}
+
+			const { chromium } = await import("playwright");
 			browser = await chromium.launch({ headless: true });
 			const context = await browser.newContext({
 				storageState: JSON.parse(sessionState),
@@ -186,7 +197,7 @@ export const checkAllowlistSessionTask = task({
 				);
 			}
 
-			await recordAllowlistCheckResult(null);
+			await safeRecordAllowlistCheckResult(null);
 			return { ok: true };
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : String(err);
@@ -194,7 +205,7 @@ export const checkAllowlistSessionTask = task({
 				{ error: errorMessage },
 				"Spotify allowlist session check failed",
 			);
-			await recordAllowlistCheckResult(errorMessage);
+			await safeRecordAllowlistCheckResult(errorMessage);
 			throw err;
 		} finally {
 			await browser?.close();
