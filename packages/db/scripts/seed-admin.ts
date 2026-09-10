@@ -75,6 +75,8 @@ async function main() {
 			id: randomUUID(),
 			accountId: userId,
 			providerId: "credential",
+			// Required by better-auth 1.7's credential sign-in lookup (createLocalAccountIssuer("credential")) — without it, sign-in fails with "User not found" even with the correct password.
+			issuer: "local:credential",
 			userId,
 			password: hashedPassword,
 			createdAt: now,
