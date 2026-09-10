@@ -1,7 +1,7 @@
 /**
  * db-ops migration: backfill-spotify-allowlist-entry
- * file: 20260910103000-backfill-spotify-allowlist-entry.ts
- * created: 2026-09-10T10:30:00.000Z
+ * file: 20260910101858-backfill-spotify-allowlist-entry.ts
+ * created: 2026-09-10T10:18:58.000Z
  *
  * WHAT
  *   #394's migration 0043 dropped spotify_allowlist_slot and
@@ -74,7 +74,7 @@ export async function up({ db, log, dryRun }: DbOpsContext): Promise<void> {
 	let skippedExisting = 0;
 	let skippedMissingUser = 0;
 
-	for (const candidate of CONFIRMED_REAL_USERS) {
+	for (const [index, candidate] of CONFIRMED_REAL_USERS.entries()) {
 		const [existingEntry] = await db
 			.select({ id: spotifyAllowlistEntry.id })
 			.from(spotifyAllowlistEntry)
@@ -92,7 +92,7 @@ export async function up({ db, log, dryRun }: DbOpsContext): Promise<void> {
 			.where(eq(user.id, candidate.userId));
 		if (!existingUser) {
 			log.error(
-				{ email: candidate.email, userId: candidate.userId },
+				{ candidateIndex: index },
 				"backfill-spotify-allowlist-entry: user_id no longer exists, skipping",
 			);
 			skippedMissingUser++;
@@ -101,7 +101,7 @@ export async function up({ db, log, dryRun }: DbOpsContext): Promise<void> {
 
 		if (dryRun) {
 			log.info(
-				{ email: candidate.email, userId: candidate.userId },
+				{ candidateIndex: index },
 				"backfill-spotify-allowlist-entry: would insert",
 			);
 			inserted++;
