@@ -32,16 +32,16 @@ const { db: dbMock, resultsQueue } = vi.hoisted(() => {
 	return { db, resultsQueue };
 });
 
-const triggerAndWaitMock = vi.hoisted(() => vi.fn());
+const triggerMock = vi.hoisted(() => vi.fn());
+const pollMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@sonaraem/db", () => ({ db: dbMock }));
+vi.mock("@trigger.dev/sdk", () => ({ runs: { poll: pollMock } }));
 vi.mock(
 	"../../../trigger/tasks/spotify-allowlist/manage-allowlist-entry",
 	() => ({
 		manageAllowlistEntryTask: {
-			triggerAndWait: (...args: unknown[]) => ({
-				unwrap: () => triggerAndWaitMock(...args),
-			}),
+			trigger: (...args: unknown[]) => triggerMock(...args),
 		},
 	}),
 );
@@ -79,13 +79,18 @@ describe("permanent allowlist", () => {
 			"old@example.com",
 		);
 		expect(result).toEqual({ alreadyAllowlisted: true });
-		expect(triggerAndWaitMock).not.toHaveBeenCalled();
+		expect(triggerMock).not.toHaveBeenCalled();
 	});
 
 	it("adds a new email and records it once capacity allows", async () => {
 		// isIdentityAllowlisted pre-check, tx advisory lock, tx existing-by-email check, tx count, tx insert...returning
 		push([], undefined, [], [{ count: 1 }], [{ id: 7 }]);
-		triggerAndWaitMock.mockResolvedValueOnce({ confirmed: true });
+		triggerMock.mockResolvedValueOnce({ id: "run_1" });
+		pollMock.mockResolvedValueOnce({
+			isSuccess: true,
+			status: "COMPLETED",
+			output: { confirmed: true },
+		});
 
 		const result = await ensureAllowlisted(
 			{ waitlistSignupId: 42 },
@@ -93,10 +98,11 @@ describe("permanent allowlist", () => {
 		);
 
 		expect(result).toEqual({ alreadyAllowlisted: false });
-		expect(triggerAndWaitMock).toHaveBeenCalledWith({
+		expect(triggerMock).toHaveBeenCalledWith({
 			email: "new@example.com",
 			action: "add",
 		});
+		expect(pollMock).toHaveBeenCalledWith({ id: "run_1" });
 	});
 
 	it("throws AllowlistCapacityError before calling Spotify once the cap is reached", async () => {
@@ -104,7 +110,7 @@ describe("permanent allowlist", () => {
 		await expect(
 			ensureAllowlisted({ waitlistSignupId: 1 }, "fifth@example.com"),
 		).rejects.toBeInstanceOf(AllowlistCapacityError);
-		expect(triggerAndWaitMock).not.toHaveBeenCalled();
+		expect(triggerMock).not.toHaveBeenCalled();
 	});
 
 	it("treats a concurrent duplicate as already-allowlisted, not an error", async () => {
@@ -114,12 +120,17 @@ describe("permanent allowlist", () => {
 		await expect(
 			ensureAllowlisted({ userId: "user-2" }, "race@example.com"),
 		).resolves.toEqual({ alreadyAllowlisted: true });
-		expect(triggerAndWaitMock).not.toHaveBeenCalled();
+		expect(triggerMock).not.toHaveBeenCalled();
 	});
 
 	it("deletes the reserved row and rethrows if the Spotify add fails", async () => {
 		push([], undefined, [], [{ count: 1 }], [{ id: 8 }]);
-		triggerAndWaitMock.mockRejectedValueOnce(new Error("spotify down"));
+		triggerMock.mockResolvedValueOnce({ id: "run_2" });
+		pollMock.mockResolvedValueOnce({
+			isSuccess: false,
+			status: "FAILED",
+			error: { message: "spotify down" },
+		});
 
 		await expect(
 			ensureAllowlisted({ waitlistSignupId: 2 }, "fails@example.com"),
