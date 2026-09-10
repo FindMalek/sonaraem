@@ -1,5 +1,6 @@
 import { db } from "@sonaraem/db";
 import { spotifyAllowlistEntry } from "@sonaraem/db/schema/spotify-allowlist";
+import { runs } from "@trigger.dev/sdk";
 import { eq, sql } from "drizzle-orm";
 
 import { MAX_ALLOWLISTED_REAL_USERS } from "../../constants/spotify-allowlist";
@@ -82,9 +83,18 @@ export async function ensureAllowlisted(
 	if (!reserved) return { alreadyAllowlisted: true };
 
 	try {
-		await manageAllowlistEntryTask
-			.triggerAndWait({ email, action: "add" })
-			.unwrap();
+		// triggerAndWait only works from inside another task's run() — this runs from a plain auth request handler, so trigger + poll is the supported way to wait for the result here.
+		const handle = await manageAllowlistEntryTask.trigger({
+			email,
+			action: "add",
+		});
+		const result = await runs.poll(handle);
+		if (!result.isSuccess) {
+			throw new Error(
+				result.error?.message ??
+					`Spotify allowlist automation run ${result.status.toLowerCase()}`,
+			);
+		}
 	} catch (err) {
 		// Don't leave a row claiming Spotify access that was never actually granted.
 		await db
