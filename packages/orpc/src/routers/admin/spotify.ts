@@ -19,12 +19,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { adminProcedure } from "../../procedures";
 
-// Encrypted at rest (AES-256-GCM, same key/cipher as the Playwright session
-// state) since this is a live Spotify account login code — the {ciphertext,
-// iv, authTag} payload is packed as JSON into the single `code` column.
-// Note: nothing decrypts or clears this yet — the OTP-consumption side
-// (reading a submitted code, marking it consumed/expired, clearing it after)
-// isn't built, tracked alongside the same login-automation gap as #372.
+// Encrypted at rest (AES-256-GCM, same cipher as the Playwright session state) as {ciphertext, iv, authTag} JSON packed into the single `code` column — nothing decrypts/clears it yet, tracked alongside the login-automation gap in #372.
 function encryptOtpCode(code: string): string {
 	return JSON.stringify(encryptSessionState(code));
 }

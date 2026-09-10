@@ -119,27 +119,36 @@ export const manageAllowlistEntryTask = task({
 				);
 			}
 
-			await waitForWriteGap();
+			// Check first, mutate only if needed — clicking "add" for an email Spotify already has (or "remove" for one it doesn't) isn't a no-op on their end: it can land on an error/edge-case DOM state that then fails the re-scrape confirmation below, exactly like a real mutation failure.
+			const emailsBefore = await scrapeAllowlistEmails(page);
+			const alreadyInTargetState =
+				action === "add"
+					? emailsBefore.includes(email.toLowerCase())
+					: !emailsBefore.includes(email.toLowerCase());
 
-			if (action === "add") {
-				await addAllowlistUser(page, email);
-			} else {
-				await removeAllowlistUser(page, email);
-			}
-			await recordAllowlistWriteNow();
+			if (!alreadyInTargetState) {
+				await waitForWriteGap();
 
-			const emails = await scrapeAllowlistEmails(page);
-			const present = emails.includes(email.toLowerCase());
-			const confirmed = action === "add" ? present : !present;
+				if (action === "add") {
+					await addAllowlistUser(page, email);
+				} else {
+					await removeAllowlistUser(page, email);
+				}
+				await recordAllowlistWriteNow();
 
-			if (!confirmed) {
-				logger.error(
-					{ email, action, scrapedEmailCount: emails.length },
-					"Allowlist re-scrape did not confirm the mutation",
-				);
-				throw new AllowlistAutomationError(
-					`Re-scrape didn't confirm "${action}" for ${email} — the dashboard's DOM may have changed`,
-				);
+				const emailsAfter = await scrapeAllowlistEmails(page);
+				const present = emailsAfter.includes(email.toLowerCase());
+				const confirmed = action === "add" ? present : !present;
+
+				if (!confirmed) {
+					logger.error(
+						{ email, action, scrapedEmailCount: emailsAfter.length },
+						"Allowlist re-scrape did not confirm the mutation",
+					);
+					throw new AllowlistAutomationError(
+						`Re-scrape didn't confirm "${action}" for ${email} — the dashboard's DOM may have changed`,
+					);
+				}
 			}
 
 			const refreshedState = await context.storageState();
