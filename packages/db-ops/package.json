@@ -12,22 +12,22 @@
 		"db:ops:library-stats": "tsx src/library-stats.ts"
 	},
 	"dependencies": {
+		"@neondatabase/serverless": "^1.1.0",
 		"@sonaraem/common": "workspace:*",
 		"@sonaraem/db": "workspace:*",
 		"@sonaraem/env": "workspace:*",
 		"@sonaraem/logger": "workspace:*",
-		"@neondatabase/serverless": "^1.1.0",
 		"dotenv": "catalog:",
 		"drizzle-orm": "catalog:",
-		"pg": "^8.21.0",
-		"ws": "^8.21.0"
+		"pg": "^8.23.0",
+		"ws": "^8.21.3"
 	},
 	"devDependencies": {
 		"@sonaraem/config": "workspace:*",
-		"@types/pg": "^8.20.0",
+		"@types/pg": "^8.23.1",
 		"@types/ws": "^8.18.1",
-		"tsx": "^4.22.4",
+		"tsx": "^4.23.13",
 		"typescript": "catalog:",
-		"vitest": "^3.2.4"
+		"vitest": "^5.0.0"
 	}
 }

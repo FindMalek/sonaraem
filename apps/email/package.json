@@ -16,7 +16,7 @@
 	},
 	"devDependencies": {
 		"@react-email/preview-server": "catalog:",
-		"@react-email/ui": "6.9.3",
+		"@react-email/ui": "6.9.5",
 		"@sonaraem/config": "workspace:*",
 		"next": "catalog:",
 		"typescript": "catalog:"

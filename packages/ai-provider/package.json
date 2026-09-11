@@ -11,12 +11,12 @@
 		"build": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@ai-sdk/groq": "^4.0.35",
-		"@ai-sdk/openai": "^4.0.52",
+		"@ai-sdk/groq": "^4.0.40",
+		"@ai-sdk/openai": "^4.0.65",
 		"@sonaraem/env": "workspace:*",
 		"@sonaraem/logger": "workspace:*",
 		"ai": "catalog:",
-		"p-retry": "^8.0.0"
+		"p-retry": "^8.0.1"
 	},
 	"devDependencies": {
 		"@sonaraem/config": "workspace:*",

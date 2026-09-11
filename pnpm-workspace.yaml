@@ -17,22 +17,22 @@ allowBuilds:
   sharp: false
 
 catalog:
-  '@biomejs/biome': ^2.5.11
+  '@biomejs/biome': ^2.5.12
   '@opentelemetry/api': ^1.9.1
-  '@opentelemetry/api-logs': ^0.221.0
-  '@opentelemetry/core': ^2.10.0
-  '@opentelemetry/exporter-logs-otlp-http': ^0.221.0
-  '@opentelemetry/exporter-metrics-otlp-http': ^0.221.0
-  '@opentelemetry/exporter-trace-otlp-http': ^0.221.0
-  '@opentelemetry/instrumentation': ^0.221.0
-  '@opentelemetry/instrumentation-http': ^0.221.0
-  '@opentelemetry/instrumentation-pino': ^0.67.0
-  '@opentelemetry/otlp-exporter-base': ^0.221.0
-  '@opentelemetry/resources': ^2.10.0
-  '@opentelemetry/sdk-logs': ^0.221.0
-  '@opentelemetry/sdk-metrics': ^2.10.0
-  '@opentelemetry/sdk-node': ^0.221.0
-  '@opentelemetry/sdk-trace-base': ^2.10.0
+  '@opentelemetry/api-logs': ^0.222.0
+  '@opentelemetry/core': ^2.11.0
+  '@opentelemetry/exporter-logs-otlp-http': ^0.222.0
+  '@opentelemetry/exporter-metrics-otlp-http': ^0.222.0
+  '@opentelemetry/exporter-trace-otlp-http': ^0.222.0
+  '@opentelemetry/instrumentation': ^0.222.0
+  '@opentelemetry/instrumentation-http': ^0.222.0
+  '@opentelemetry/instrumentation-pino': ^0.68.0
+  '@opentelemetry/otlp-exporter-base': ^0.222.0
+  '@opentelemetry/resources': ^2.11.0
+  '@opentelemetry/sdk-logs': ^0.222.0
+  '@opentelemetry/sdk-metrics': ^2.11.0
+  '@opentelemetry/sdk-node': ^0.222.0
+  '@opentelemetry/sdk-trace-base': ^2.11.0
   '@opentelemetry/semantic-conventions': ^1.43.0
   '@orpc/client': ^1.15.0
   '@orpc/openapi': ^1.15.0
@@ -42,23 +42,23 @@ catalog:
   '@t3-oss/env-core': ^0.13.11
   '@t3-oss/env-nextjs': ^0.13.11
   '@tanstack/react-query': ^5.102.8
-  '@trigger.dev/build': ^4.5.14
-  '@trigger.dev/sdk': ^4.5.14
+  '@trigger.dev/build': ^4.5.16
+  '@trigger.dev/sdk': ^4.5.16
   '@types/react': ^19.2.17
   '@types/react-dom': ^19.2.3
-  ai: ^7.0.85
-  better-auth: 1.7.2
+  ai: ^7.0.97
+  better-auth: 1.7.3
   dotenv: ^17.4.2
   drizzle-orm: ^0.45.2
   next: ^16.3.4
-  playwright: ^1.62.1
-  react: ^19.2.8
-  react-dom: ^19.2.8
-  react-email: 6.9.3
-  resend: ^6.25.0
+  playwright: ^1.63.0
+  react: ^19.3.0
+  react-dom: ^19.3.0
+  react-email: 6.9.5
+  resend: ^6.27.0
   tsdown: ^0.11.0
   typescript: 7.0.2
-  zod: ^4.5.4
+  zod: ^4.6.1
   '@react-email/components': ^1.0.12
   '@react-email/render': ^2.1.0
   '@react-email/tailwind': ^2.0.6
