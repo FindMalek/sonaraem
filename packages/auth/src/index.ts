@@ -4,6 +4,7 @@ import {
 	type AllowlistIdentity,
 	enqueueSnapshotRefresh,
 	ensureAllowlisted,
+	getRotationEntryByUserId,
 } from "@sonaraem/common/services/spotify-allowlist";
 import {
 	getWaitlistInviteIdentity,
@@ -103,14 +104,17 @@ async function autoApproveIfWaitlisted(accountUserId: string): Promise<void> {
  * First-ever Spotify link only (#290) — the user is already on the real
  * allowlist by this point (the pre-OAuth `before` hook below put them there),
  * so queue their initial sync now instead of waiting for them to find a
- * "sync now" button. Never called from account.update.after: that fires on
- * every silent token re-auth, and enqueuing a fresh sync there would defeat
- * the whole point of the rolling budget.
+ * "sync now" button. This hook also fires on re-auth after Better Auth
+ * re-links an existing account, not just true first-time links, so gate on
+ * `lastServicedAt` being unset — a user who's already been serviced once
+ * doesn't need another sync just because their token refreshed.
  */
 async function enqueueInitialSyncIfNeeded(
 	accountUserId: string,
 ): Promise<void> {
 	try {
+		const entry = await getRotationEntryByUserId(accountUserId);
+		if (entry?.lastServicedAt) return;
 		await enqueueSnapshotRefresh(accountUserId);
 	} catch (err) {
 		logger.warn(

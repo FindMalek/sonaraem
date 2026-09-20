@@ -11,6 +11,7 @@ import {
 	getRotationEntryByUserId,
 	markJobsDone,
 	markJobsFailed,
+	markRotationEntryOffList,
 	markRotationEntryOnList,
 	markRotationEntryServiced,
 	requeueForBudget,
@@ -52,8 +53,16 @@ export const rotationDispatcherTask = schedules.task({
 
 			// Idempotent if already on-list for some other reason — never re-add what's already added.
 			if (entry.status !== "on_list") {
-				await runAllowlistMutation(entry.email, "add");
+				// Reserve the seat before the real Spotify call, not after — ensureAllowlisted's
+				// capacity check counts on_list rows, so flipping status only after a successful
+				// add would let a concurrent onboarding admission undercount and overshoot capacity.
 				await markRotationEntryOnList(entry.id);
+				try {
+					await runAllowlistMutation(entry.email, "add");
+				} catch (err) {
+					await markRotationEntryOffList(entry.id);
+					throw err;
+				}
 			}
 
 			for (const job of batch.jobs) {

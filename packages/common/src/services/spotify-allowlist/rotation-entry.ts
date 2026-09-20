@@ -7,6 +7,7 @@ export type RotationEntry = {
 	email: string;
 	status: "on_list" | "off_list";
 	refreshIntervalDays: number;
+	lastServicedAt: Date | null;
 };
 
 export async function getRotationEntryByUserId(
@@ -18,6 +19,7 @@ export async function getRotationEntryByUserId(
 			email: spotifyAllowlistEntry.email,
 			status: spotifyAllowlistEntry.status,
 			refreshIntervalDays: spotifyAllowlistEntry.refreshIntervalDays,
+			lastServicedAt: spotifyAllowlistEntry.lastServicedAt,
 		})
 		.from(spotifyAllowlistEntry)
 		.where(eq(spotifyAllowlistEntry.userId, userId))
@@ -29,6 +31,14 @@ export async function markRotationEntryOnList(id: number): Promise<void> {
 	await db
 		.update(spotifyAllowlistEntry)
 		.set({ status: "on_list" })
+		.where(eq(spotifyAllowlistEntry.id, id));
+}
+
+/** Plain status revert for a failed add after reserving the seat — unlike markRotationEntryServiced, does not touch lastServicedAt/nextDueAt, since no real visit happened. */
+export async function markRotationEntryOffList(id: number): Promise<void> {
+	await db
+		.update(spotifyAllowlistEntry)
+		.set({ status: "off_list" })
 		.where(eq(spotifyAllowlistEntry.id, id));
 }
 

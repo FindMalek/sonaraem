@@ -69,16 +69,27 @@ describe("rotation job queue", () => {
 			push([], undefined);
 			await expect(enqueueExport("user-1", [10, 11])).resolves.toBeUndefined();
 		});
+
+		it("merges new playlist IDs into an existing queued export instead of dropping them", async () => {
+			push([{ id: 1, status: "queued", playlistIds: [10] }], undefined);
+			await expect(enqueueExport("user-1", [11])).resolves.toBeUndefined();
+		});
+
+		it("queues a follow-up job when the existing export is already dispatched", async () => {
+			push([{ id: 1, status: "dispatched", playlistIds: [10] }], undefined);
+			await expect(enqueueExport("user-1", [11])).resolves.toBeUndefined();
+		});
 	});
 
 	describe("getNextConsolidatedBatch", () => {
 		it("returns null when nothing is queued", async () => {
-			push([]);
+			push(undefined, []);
 			await expect(getNextConsolidatedBatch()).resolves.toBeNull();
 		});
 
 		it("consolidates every queued job for the same user and marks them dispatched", async () => {
 			push(
+				undefined,
 				[{ userId: "user-1" }],
 				[
 					{ id: 1, jobType: "snapshot_refresh", playlistIds: null },
@@ -97,7 +108,7 @@ describe("rotation job queue", () => {
 		});
 
 		it("returns null if the picked user's jobs vanish before the follow-up query", async () => {
-			push([{ userId: "user-1" }], []);
+			push(undefined, [{ userId: "user-1" }], []);
 			await expect(getNextConsolidatedBatch()).resolves.toBeNull();
 		});
 	});

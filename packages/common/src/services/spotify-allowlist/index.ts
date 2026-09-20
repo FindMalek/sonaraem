@@ -27,6 +27,7 @@ export type { RotationEntry } from "./rotation-entry";
 export {
 	findDueForRefresh,
 	getRotationEntryByUserId,
+	markRotationEntryOffList,
 	markRotationEntryOnList,
 	markRotationEntryServiced,
 } from "./rotation-entry";

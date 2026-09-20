@@ -1,6 +1,6 @@
 import { db } from "@sonaraem/db";
 import { spotifyRotationJob } from "@sonaraem/db/schema/spotify-allowlist";
-import { and, asc, desc, eq, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
 
 export type RotationJobType = "snapshot_refresh" | "export";
 
@@ -48,12 +48,44 @@ export async function enqueueSnapshotRefresh(
 	});
 }
 
+/**
+ * A second export request while one is already queued merges its playlist
+ * IDs into that job instead of being silently dropped — a job already
+ * dispatched/active is in flight and can't be safely mutated, so that case
+ * queues a follow-up job instead.
+ */
 export async function enqueueExport(
 	userId: string,
 	playlistIds: number[],
 	opts: { deadlineAt?: Date } = {},
 ): Promise<void> {
-	if (await hasUnfinishedJob(userId, "export")) return;
+	const [existing] = await db
+		.select({
+			id: spotifyRotationJob.id,
+			status: spotifyRotationJob.status,
+			playlistIds: spotifyRotationJob.playlistIds,
+		})
+		.from(spotifyRotationJob)
+		.where(
+			and(
+				eq(spotifyRotationJob.userId, userId),
+				eq(spotifyRotationJob.jobType, "export"),
+				inArray(spotifyRotationJob.status, ["queued", "dispatched", "active"]),
+			),
+		)
+		.limit(1);
+
+	if (existing?.status === "queued") {
+		const merged = Array.from(
+			new Set([...(existing.playlistIds ?? []), ...playlistIds]),
+		);
+		await db
+			.update(spotifyRotationJob)
+			.set({ playlistIds: merged })
+			.where(eq(spotifyRotationJob.id, existing.id));
+		return;
+	}
+
 	await db.insert(spotifyRotationJob).values({
 		userId,
 		jobType: "export",
@@ -81,8 +113,28 @@ export type ConsolidatedBatch = {
  * shouldn't be one — the dispatcher task runs at concurrencyLimit: 1 — but
  * cheap insurance) won't double-pick it.
  */
+// If the dispatcher process dies between getNextConsolidatedBatch committing
+// "dispatched" and its own try block actually running, those jobs would
+// otherwise sit ineligible forever (only "queued" jobs get picked, and
+// hasUnfinishedJob still treats "dispatched" as unfinished) — reclaim them
+// once they've been dispatched longer than any real run should take.
+const STALE_DISPATCH_MS = 30 * 60 * 1000;
+
 export async function getNextConsolidatedBatch(): Promise<ConsolidatedBatch | null> {
 	return db.transaction(async (tx) => {
+		await tx
+			.update(spotifyRotationJob)
+			.set({ status: "queued" })
+			.where(
+				and(
+					eq(spotifyRotationJob.status, "dispatched"),
+					lt(
+						spotifyRotationJob.lastAttemptAt,
+						new Date(Date.now() - STALE_DISPATCH_MS),
+					),
+				),
+			);
+
 		const [head] = await tx
 			.select({ userId: spotifyRotationJob.userId })
 			.from(spotifyRotationJob)

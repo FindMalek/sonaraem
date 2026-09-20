@@ -184,6 +184,11 @@ export const manageAllowlistEntryTask = task({
 
 			return { confirmed: true };
 		} catch (err) {
+			if (err instanceof AllowlistBudgetExhaustedError) {
+				// Expected, routine — not a health-check failure or an alert-worthy event. Rethrow as-is for the dispatcher's own budget handling (#408).
+				logger.info({ email, action }, err.message);
+				throw err;
+			}
 			const errorMessage = err instanceof Error ? err.message : String(err);
 			logger.error(
 				{ email, action, error: errorMessage },
