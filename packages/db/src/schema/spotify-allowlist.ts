@@ -17,17 +17,13 @@ export const spotifyOtpRequestStatusEnum = pgEnum(
 	["pending", "submitted", "consumed", "expired", "failed"],
 );
 
-// Which side of a mutation this is — ADD and REMOVE are throttled as two
-// separate rolling-24h budgets (docs/decisions/0001-spotify-allowlist-rotation.md),
-// so they're tracked as two independent sliding windows over this one log.
+// ADD and REMOVE are throttled as two separate rolling-24h budgets (docs/decisions/0001), tracked as two independent sliding windows over this one log.
 export const spotifyAllowlistMutationDirectionEnum = pgEnum(
 	"spotify_allowlist_mutation_direction",
 	["add", "remove"],
 );
 
-// Append-only log of every confirmed allowlist mutation — the source of
-// truth for the rolling-24h rate limiter. Never trimmed on write; a
-// mutation older than 24h is simply excluded from the window count.
+// Append-only log backing the rolling-24h rate limiter — never trimmed; a mutation older than 24h is just excluded from the window count.
 export const spotifyAllowlistMutationLog = pgTable(
 	"spotify_allowlist_mutation_log",
 	{
@@ -44,18 +40,13 @@ export const spotifyAllowlistMutationLog = pgTable(
 	],
 );
 
-// A user's current position in the Spotify allowlist rotation. One row per
-// user ever admitted — never deleted, even while off-list (docs/decisions/0001).
+// A user's current position in the rotation — never deleted, even while off-list (docs/decisions/0001).
 export const spotifyRotationStatusEnum = pgEnum("spotify_rotation_status", [
 	"on_list",
 	"off_list",
 ]);
 
-// Async background work waiting for a rotation seat. Deliberately excludes
-// onboarding: a brand-new user's first add happens synchronously inside the
-// OAuth redirect hook (gated by the connect-queue admission pool on
-// waitlist_signup), not through this table — this table is only for
-// already-onboarded, currently off-list users who need a seat again.
+// Async background work waiting for a rotation seat — excludes onboarding, which adds synchronously inside the OAuth redirect hook; this table is only for already-onboarded, off-list users needing a seat again.
 export const spotifyRotationJobTypeEnum = pgEnum("spotify_rotation_job_type", [
 	"snapshot_refresh",
 	"export",
@@ -82,15 +73,7 @@ export const spotifyOtpRequest = pgTable(
 	],
 );
 
-// One row per email ever admitted into the Spotify allowlist rotation — never
-// deleted, even while currently off-list (rotation v2, docs/decisions/0001,
-// supersedes the "permanent, never removed" model from #392). `status` is the
-// live source of truth for whether this email currently occupies one of the
-// 4 rotating seats (1 additional admin seat is never a row here).
-// `lastServicedAt`/`nextDueAt` drive the due-date scanner and the
-// consolidation rule: any successful visit for any reason bumps both, so a
-// user is never re-added for a second reason shortly after being serviced
-// for a first one.
+// One row per email ever admitted — never deleted (rotation v2, docs/decisions/0001, supersedes #392's permanent model). `status` tracks whether it occupies one of the 4 rotating seats; `lastServicedAt`/`nextDueAt` drive the due-date scanner and the consolidation rule (any successful visit bumps both).
 export const spotifyAllowlistEntry = pgTable(
 	"spotify_allowlist_entry",
 	{
@@ -105,9 +88,7 @@ export const spotifyAllowlistEntry = pgTable(
 		status: spotifyRotationStatusEnum("status").notNull().default("on_list"),
 		lastServicedAt: timestamp("last_serviced_at"),
 		nextDueAt: timestamp("next_due_at"),
-		// Per-user adaptive cadence in days (default matches the 21-30d baseline
-		// from docs/decisions/0001) — lower this for a future "active tier"
-		// rather than changing the system-wide default.
+		// Per-user cadence (default matches docs/decisions/0001's baseline) — lower for a future "active tier" rather than changing the system-wide default.
 		refreshIntervalDays: integer("refresh_interval_days").notNull().default(30),
 	},
 	(table) => [

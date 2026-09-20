@@ -18,8 +18,7 @@ const { db: dbMock, resultsQueue } = vi.hoisted(() => {
 		if (next instanceof Error) return Promise.reject(next);
 		return Promise.resolve(next);
 	}
-	// Same chain-backed mock for both the outer db and the tx handed to
-	// db.transaction's callback, matching the pattern in permanent-allowlist.test.ts.
+	// Same chain-backed mock for both the outer db and the tx, matching permanent-allowlist.test.ts.
 	const txLike = {
 		select: () => chain(),
 		insert: () => chain(),

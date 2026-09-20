@@ -27,9 +27,7 @@ const USERS_URL = () =>
 // No login automation yet (needs Spotify's login/OTP DOM) — a session must already exist.
 class AllowlistAutomationError extends Error {}
 
-// Thrown before ever touching Playwright/Spotify when the rolling-24h budget
-// for this direction is exhausted (docs/decisions/0001-spotify-allowlist-rotation.md)
-// — callers should treat this as "try again later", not a real automation failure.
+// Thrown before ever touching Playwright/Spotify when the rolling-24h budget for this direction is exhausted (docs/decisions/0001) — treat as "try again later", not a real automation failure.
 export class AllowlistBudgetExhaustedError extends Error {
 	constructor(direction: "add" | "remove") {
 		super(
@@ -39,10 +37,7 @@ export class AllowlistBudgetExhaustedError extends Error {
 	}
 }
 
-// Matches the message text above — kept next to it so they can't drift apart.
-// This is the only way callers on the other side of runAllowlistMutation's
-// runs.poll() boundary can tell "wait for budget" apart from a real failure,
-// since only the message string (not the class) survives that boundary.
+// Matches the message above — the only way callers past runAllowlistMutation's runs.poll() boundary can tell a budget wait from a real failure, since only the string (not the class) survives it.
 export function isBudgetExhaustedMessage(message: string): boolean {
 	return message.includes(
 		"budget exhausted for the current rolling 24h window",
@@ -151,21 +146,14 @@ export const manageAllowlistEntryTask = task({
 					: !emailsBefore.includes(email.toLowerCase());
 
 			if (!alreadyInTargetState) {
-				// Hard gate, checked before ever touching Spotify — never attempt a
-				// mutation we already know would exceed the rolling-24h budget
-				// (docs/decisions/0001-spotify-allowlist-rotation.md). Cheaper and
-				// safer than finding out via a real 429 from Spotify's dashboard.
+				// Hard gate before ever touching Spotify — cheaper and safer than finding out via a real 429 from Spotify's dashboard.
 				if (!(await hasMutationBudget(action))) {
 					throw new AllowlistBudgetExhaustedError(action);
 				}
 
 				await waitForWriteGap();
 
-				// Recorded before the real action, not after: a crash between
-				// this write and the real mutation below should waste a budget
-				// unit (safe — self-corrects on the next rolling window), never
-				// hide one that was actually spent (unsafe — could let a later
-				// attempt exceed Spotify's real throttle).
+				// Recorded before the real action: a crash here should waste a budget unit (safe), never hide one that was actually spent (unsafe).
 				await recordMutation(action, email);
 
 				if (action === "add") {

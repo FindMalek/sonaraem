@@ -65,9 +65,7 @@ describe("permanent allowlist", () => {
 
 	it("reports false when an email has no entry on record", async () => {
 		push([]);
-		await expect(isIdentityAllowlisted("new@example.com")).resolves.toBe(
-			false,
-		);
+		await expect(isIdentityAllowlisted("new@example.com")).resolves.toBe(false);
 	});
 
 	it("reports false for an off_list entry — not currently on Spotify's real allowlist", async () => {

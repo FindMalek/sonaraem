@@ -76,11 +76,7 @@ export async function ensureAllowlisted(
 		}
 
 		if (existing) {
-			// Returning rotation user, currently off-list — reactivate in place rather than
-			// inserting a duplicate (the unique index on email would reject that anyway).
-			// Inlined rather than calling rotation-entry.ts's markRotationEntryOnList: that
-			// helper always runs against the module-level `db`, and this update must happen
-			// inside THIS transaction to stay atomic with the capacity check above.
+			// Reactivate in place (unique index on email rejects a duplicate insert); inlined, not markRotationEntryOnList, since that runs against the module-level `db` and this must stay inside THIS transaction.
 			await tx
 				.update(spotifyAllowlistEntry)
 				.set({ status: "on_list" })
@@ -96,7 +92,9 @@ export async function ensureAllowlisted(
 				waitlistSignupId: identity.waitlistSignupId ?? null,
 			})
 			.returning({ id: spotifyAllowlistEntry.id });
-		return insertedRow ? { id: insertedRow.id, reactivated: false as const } : null;
+		return insertedRow
+			? { id: insertedRow.id, reactivated: false as const }
+			: null;
 	});
 
 	// null means a racing transaction already committed this email while we waited on the lock.
@@ -106,8 +104,7 @@ export async function ensureAllowlisted(
 		await runAllowlistMutation(email, "add");
 	} catch (err) {
 		if (reserved.reactivated) {
-			// This row represents real onboarding history, not a failed attempt to create
-			// one — leave it on record, just roll the status back to off_list.
+			// Real onboarding history, not a failed create — roll status back instead of deleting.
 			await db
 				.update(spotifyAllowlistEntry)
 				.set({ status: "off_list" })

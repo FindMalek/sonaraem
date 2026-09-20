@@ -18,9 +18,7 @@ import {
 } from "../../../services/spotify-allowlist";
 import { isBudgetExhaustedMessage } from "./manage-allowlist-entry";
 
-// Serialize dispatch runs — the underlying Playwright worker is already
-// concurrency:1, but this keeps "pick a batch, mark it dispatched" atomic
-// against overlapping cron fires without needing a DB-level lock.
+// Serialize dispatch runs — the Playwright worker is already concurrency:1, but this keeps "pick a batch, mark it dispatched" atomic against overlapping cron fires without a DB-level lock.
 const rotationDispatcherQueue: Queue = queue({
 	name: "spotify-rotation-dispatcher",
 	concurrencyLimit: 1,
@@ -52,8 +50,7 @@ export const rotationDispatcherTask = schedules.task({
 				);
 			}
 
-			// Idempotent if this user is already on-list for some other reason
-			// (shouldn't normally happen, but never re-add what's already added).
+			// Idempotent if already on-list for some other reason — never re-add what's already added.
 			if (entry.status !== "on_list") {
 				await runAllowlistMutation(entry.email, "add");
 				await markRotationEntryOnList(entry.id);
@@ -66,9 +63,7 @@ export const rotationDispatcherTask = schedules.task({
 					for (const playlistId of job.playlistIds ?? []) {
 						await exportPlaylistToSpotify(batch.userId, playlistId);
 					}
-					// TODO(docs/decisions/0001, phase 3): send the
-					// "here's what got exported" email once the export-queue
-					// email templates exist.
+					// TODO(docs/decisions/0001, phase 3, #410): send the "here's what got exported" email once the template exists.
 				}
 			}
 
@@ -100,9 +95,7 @@ export const rotationDispatcherTask = schedules.task({
 				"Spotify rotation dispatch failed",
 			);
 			await markJobsFailed(jobIds, message);
-			// Don't rethrow — a failed batch shouldn't crash the whole scheduled
-			// run; it's already requeued (with backoff) or marked failed by
-			// markJobsFailed, and the next tick picks up whatever's next.
+			// Don't rethrow — already requeued (with backoff) or marked failed by markJobsFailed; the next tick picks up whatever's next.
 			return { dispatched: false, error: message };
 		}
 	},

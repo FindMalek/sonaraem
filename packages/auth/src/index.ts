@@ -107,7 +107,9 @@ async function autoApproveIfWaitlisted(accountUserId: string): Promise<void> {
  * every silent token re-auth, and enqueuing a fresh sync there would defeat
  * the whole point of the rolling budget.
  */
-async function enqueueInitialSyncIfNeeded(accountUserId: string): Promise<void> {
+async function enqueueInitialSyncIfNeeded(
+	accountUserId: string,
+): Promise<void> {
 	try {
 		await enqueueSnapshotRefresh(accountUserId);
 	} catch (err) {
