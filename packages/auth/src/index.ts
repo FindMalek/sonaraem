@@ -2,6 +2,7 @@ import { clearSpotifyNeedsReauth } from "@sonaraem/common/services/music";
 import {
 	AllowlistCapacityError,
 	type AllowlistIdentity,
+	enqueueSnapshotRefresh,
 	ensureAllowlisted,
 } from "@sonaraem/common/services/spotify-allowlist";
 import {
@@ -94,6 +95,28 @@ async function autoApproveIfWaitlisted(accountUserId: string): Promise<void> {
 				error: err instanceof Error ? err.message : String(err),
 			},
 			"Failed to auto-approve from waitlist on Spotify sign-in",
+		);
+	}
+}
+
+/**
+ * First-ever Spotify link only (#290) — the user is already on the real
+ * allowlist by this point (the pre-OAuth `before` hook below put them there),
+ * so queue their initial sync now instead of waiting for them to find a
+ * "sync now" button. Never called from account.update.after: that fires on
+ * every silent token re-auth, and enqueuing a fresh sync there would defeat
+ * the whole point of the rolling budget.
+ */
+async function enqueueInitialSyncIfNeeded(accountUserId: string): Promise<void> {
+	try {
+		await enqueueSnapshotRefresh(accountUserId);
+	} catch (err) {
+		logger.warn(
+			{
+				userId: accountUserId,
+				error: err instanceof Error ? err.message : String(err),
+			},
+			"Failed to enqueue initial Spotify sync after account link",
 		);
 	}
 }
@@ -209,6 +232,7 @@ export function createDashboardAuth(
 						await Promise.all([
 							clearReauthFlagIfNeeded(createdAccount.userId),
 							autoApproveIfWaitlisted(createdAccount.userId),
+							enqueueInitialSyncIfNeeded(createdAccount.userId),
 						]);
 					},
 				},

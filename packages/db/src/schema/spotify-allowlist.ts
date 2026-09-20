@@ -17,6 +17,55 @@ export const spotifyOtpRequestStatusEnum = pgEnum(
 	["pending", "submitted", "consumed", "expired", "failed"],
 );
 
+// Which side of a mutation this is — ADD and REMOVE are throttled as two
+// separate rolling-24h budgets (docs/decisions/0001-spotify-allowlist-rotation.md),
+// so they're tracked as two independent sliding windows over this one log.
+export const spotifyAllowlistMutationDirectionEnum = pgEnum(
+	"spotify_allowlist_mutation_direction",
+	["add", "remove"],
+);
+
+// Append-only log of every confirmed allowlist mutation — the source of
+// truth for the rolling-24h rate limiter. Never trimmed on write; a
+// mutation older than 24h is simply excluded from the window count.
+export const spotifyAllowlistMutationLog = pgTable(
+	"spotify_allowlist_mutation_log",
+	{
+		id: serial("id").primaryKey(),
+		direction: spotifyAllowlistMutationDirectionEnum("direction").notNull(),
+		email: text("email").notNull(),
+		occurredAt: timestamp("occurred_at").defaultNow().notNull(),
+	},
+	(table) => [
+		index("spotify_allowlist_mutation_log_direction_occurred_at_idx").on(
+			table.direction,
+			table.occurredAt,
+		),
+	],
+);
+
+// A user's current position in the Spotify allowlist rotation. One row per
+// user ever admitted — never deleted, even while off-list (docs/decisions/0001).
+export const spotifyRotationStatusEnum = pgEnum("spotify_rotation_status", [
+	"on_list",
+	"off_list",
+]);
+
+// Async background work waiting for a rotation seat. Deliberately excludes
+// onboarding: a brand-new user's first add happens synchronously inside the
+// OAuth redirect hook (gated by the connect-queue admission pool on
+// waitlist_signup), not through this table — this table is only for
+// already-onboarded, currently off-list users who need a seat again.
+export const spotifyRotationJobTypeEnum = pgEnum("spotify_rotation_job_type", [
+	"snapshot_refresh",
+	"export",
+]);
+
+export const spotifyRotationJobStatusEnum = pgEnum(
+	"spotify_rotation_job_status",
+	["queued", "dispatched", "active", "done", "failed", "cancelled"],
+);
+
 // code is deleted (not just marked consumed) once used — no reason to retain a spent OTP in plaintext.
 export const spotifyOtpRequest = pgTable(
 	"spotify_otp_request",
@@ -33,7 +82,15 @@ export const spotifyOtpRequest = pgTable(
 	],
 );
 
-// One row per email permanently added to the real Spotify Dev Mode allowlist (#392) — never removed; 4 rows here + 1 admin-reserved seat (never a row) = Spotify's 5-user cap.
+// One row per email ever admitted into the Spotify allowlist rotation — never
+// deleted, even while currently off-list (rotation v2, docs/decisions/0001,
+// supersedes the "permanent, never removed" model from #392). `status` is the
+// live source of truth for whether this email currently occupies one of the
+// 4 rotating seats (1 additional admin seat is never a row here).
+// `lastServicedAt`/`nextDueAt` drive the due-date scanner and the
+// consolidation rule: any successful visit for any reason bumps both, so a
+// user is never re-added for a second reason shortly after being serviced
+// for a first one.
 export const spotifyAllowlistEntry = pgTable(
 	"spotify_allowlist_entry",
 	{
@@ -45,10 +102,53 @@ export const spotifyAllowlistEntry = pgTable(
 			{ onDelete: "set null" },
 		),
 		allowlistedAt: timestamp("allowlisted_at").defaultNow().notNull(),
+		status: spotifyRotationStatusEnum("status").notNull().default("on_list"),
+		lastServicedAt: timestamp("last_serviced_at"),
+		nextDueAt: timestamp("next_due_at"),
+		// Per-user adaptive cadence in days (default matches the 21-30d baseline
+		// from docs/decisions/0001) — lower this for a future "active tier"
+		// rather than changing the system-wide default.
+		refreshIntervalDays: integer("refresh_interval_days").notNull().default(30),
 	},
 	(table) => [
 		uniqueIndex("spotify_allowlist_entry_email_unique").on(
 			sql`lower(${table.email})`,
+		),
+		index("spotify_allowlist_entry_status_next_due_at_idx").on(
+			table.status,
+			table.nextDueAt,
+		),
+	],
+);
+
+export const spotifyRotationJob = pgTable(
+	"spotify_rotation_job",
+	{
+		id: serial("id").primaryKey(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => user.id, { onDelete: "cascade" }),
+		jobType: spotifyRotationJobTypeEnum("job_type").notNull(),
+		status: spotifyRotationJobStatusEnum("status").notNull().default("queued"),
+		priority: integer("priority").notNull().default(0),
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+		eligibleAt: timestamp("eligible_at").defaultNow().notNull(),
+		deadlineAt: timestamp("deadline_at"),
+		// Only meaningful for jobType 'export' — the specific playlists requested.
+		playlistIds: integer("playlist_ids").array(),
+		retryCount: integer("retry_count").notNull().default(0),
+		lastAttemptAt: timestamp("last_attempt_at"),
+		lastError: text("last_error"),
+		completedAt: timestamp("completed_at"),
+	},
+	(table) => [
+		index("spotify_rotation_job_status_priority_idx").on(
+			table.status,
+			table.priority,
+		),
+		index("spotify_rotation_job_user_id_status_idx").on(
+			table.userId,
+			table.status,
 		),
 	],
 );

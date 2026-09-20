@@ -2,6 +2,18 @@
 // name, also used for OTP codes (spotify-login-relay). Not renamed to avoid
 // unrelated churn on the crypto module's tested public API.
 export { decryptSessionState, encryptSessionState } from "./crypto";
+export { runAllowlistMutation } from "./mutate";
+export type {
+	MutationBudgetStatus,
+	MutationDirection,
+} from "./mutation-budget";
+export {
+	countMutationsInWindow,
+	getMutationBudgetStatus,
+	hasMutationBudget,
+	recordMutation,
+	SAFE_MUTATION_BUDGET_PER_DIRECTION,
+} from "./mutation-budget";
 export type {
 	AllowlistIdentity,
 	EnsureAllowlistedResult,
@@ -11,6 +23,22 @@ export {
 	ensureAllowlisted,
 	isIdentityAllowlisted,
 } from "./permanent-allowlist";
+export type { RotationEntry } from "./rotation-entry";
+export {
+	findDueForRefresh,
+	getRotationEntryByUserId,
+	markRotationEntryOnList,
+	markRotationEntryServiced,
+} from "./rotation-entry";
+export type { ConsolidatedBatch, RotationJobType } from "./rotation-job";
+export {
+	enqueueExport,
+	enqueueSnapshotRefresh,
+	getNextConsolidatedBatch,
+	markJobsDone,
+	markJobsFailed,
+	requeueForBudget,
+} from "./rotation-job";
 export type { AllowlistSessionHealth } from "./session";
 export {
 	clearAllowlistSession,
