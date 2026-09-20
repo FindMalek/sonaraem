@@ -113,11 +113,7 @@ export type ConsolidatedBatch = {
  * shouldn't be one — the dispatcher task runs at concurrencyLimit: 1 — but
  * cheap insurance) won't double-pick it.
  */
-// If the dispatcher process dies between getNextConsolidatedBatch committing
-// "dispatched" and its own try block actually running, those jobs would
-// otherwise sit ineligible forever (only "queued" jobs get picked, and
-// hasUnfinishedJob still treats "dispatched" as unfinished) — reclaim them
-// once they've been dispatched longer than any real run should take.
+// Reclaims jobs stuck "dispatched" if the dispatcher died before its try block ran — otherwise only "queued" jobs get picked and they'd sit ineligible forever.
 const STALE_DISPATCH_MS = 30 * 60 * 1000;
 
 export async function getNextConsolidatedBatch(): Promise<ConsolidatedBatch | null> {

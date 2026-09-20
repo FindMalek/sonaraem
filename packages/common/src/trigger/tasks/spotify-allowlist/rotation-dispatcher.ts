@@ -53,9 +53,7 @@ export const rotationDispatcherTask = schedules.task({
 
 			// Idempotent if already on-list for some other reason — never re-add what's already added.
 			if (entry.status !== "on_list") {
-				// Reserve the seat before the real Spotify call, not after — ensureAllowlisted's
-				// capacity check counts on_list rows, so flipping status only after a successful
-				// add would let a concurrent onboarding admission undercount and overshoot capacity.
+				// Reserve the seat before the real add, not after — else a concurrent onboarding admission could undercount on_list rows and overshoot capacity.
 				await markRotationEntryOnList(entry.id);
 				try {
 					await runAllowlistMutation(entry.email, "add");
