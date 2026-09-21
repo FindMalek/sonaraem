@@ -32,6 +32,39 @@ export async function isIdentityAllowlisted(email: string): Promise<boolean> {
 }
 
 /**
+ * Reactivates an existing off-list entry to on_list for the rotation
+ * dispatcher, under the SAME advisory lock and on_list capacity re-check
+ * `ensureAllowlisted` uses for new admissions — without this, a scheduled
+ * rotation visit and a brand-new onboarding sign-in could each independently
+ * observe room under the cap and both flip to on_list, landing more real
+ * users on Spotify's actual allowlist than either the app's own
+ * MAX_ALLOWLISTED_REAL_USERS cap or Spotify's real 5-email limit allows.
+ * Returns false (no seat available right now) rather than throwing — the
+ * caller should treat that the same as a budget wait, not a real failure.
+ */
+export async function reserveRotationSeat(entryId: number): Promise<boolean> {
+	return db.transaction(async (tx) => {
+		await tx.execute(
+			sql`select pg_advisory_xact_lock(hashtext('sonaraem_spotify_allowlist_capacity'))`,
+		);
+
+		const [countRow] = await tx
+			.select({ count: sql<number>`count(*)::int` })
+			.from(spotifyAllowlistEntry)
+			.where(eq(spotifyAllowlistEntry.status, "on_list"));
+		if ((countRow?.count ?? 0) >= MAX_ALLOWLISTED_REAL_USERS) {
+			return false;
+		}
+
+		await tx
+			.update(spotifyAllowlistEntry)
+			.set({ status: "on_list" })
+			.where(eq(spotifyAllowlistEntry.id, entryId));
+		return true;
+	});
+}
+
+/**
  * Adds `email` to the real Spotify Dev Mode allowlist (rotation-v2, docs/decisions/0001 — supersedes
  * #392's permanent model). A no-op (no Spotify call) if the email already occupies a rotating seat.
  * Throws AllowlistCapacityError before ever calling Spotify once all `MAX_ALLOWLISTED_REAL_USERS` seats

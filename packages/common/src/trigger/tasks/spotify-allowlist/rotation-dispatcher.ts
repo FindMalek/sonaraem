@@ -12,9 +12,9 @@ import {
 	markJobsDone,
 	markJobsFailed,
 	markRotationEntryOffList,
-	markRotationEntryOnList,
 	markRotationEntryServiced,
 	requeueForBudget,
+	reserveRotationSeat,
 	runAllowlistMutation,
 } from "../../../services/spotify-allowlist";
 import { isBudgetExhaustedMessage } from "./manage-allowlist-entry";
@@ -53,8 +53,18 @@ export async function dispatchNextRotationBatch() {
 
 		// Idempotent if already on-list for some other reason — never re-add what's already added.
 		if (entry.status !== "on_list") {
-			// Reserve the seat before the real add, not after — else a concurrent onboarding admission could undercount on_list rows and overshoot capacity.
-			await markRotationEntryOnList(entry.id);
+			// Same advisory-locked, capacity-rechecked reservation ensureAllowlisted uses for
+			// new admissions — a plain unlocked status flip here could race a concurrent
+			// onboarding sign-in and land both on_list, overshooting the real seat cap.
+			const seatReserved = await reserveRotationSeat(entry.id);
+			if (!seatReserved) {
+				await requeueForBudget(jobIds);
+				logger.info(
+					{ userId: batch.userId, jobIds },
+					"Rotation batch waiting on a free seat, requeued",
+				);
+				return { dispatched: false, waitingOnBudget: true };
+			}
 			try {
 				await runAllowlistMutation(entry.email, "add");
 			} catch (err) {

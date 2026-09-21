@@ -22,6 +22,7 @@ export {
 	AllowlistCapacityError,
 	ensureAllowlisted,
 	isIdentityAllowlisted,
+	reserveRotationSeat,
 } from "./permanent-allowlist";
 export type { RotationEntry } from "./rotation-entry";
 export {

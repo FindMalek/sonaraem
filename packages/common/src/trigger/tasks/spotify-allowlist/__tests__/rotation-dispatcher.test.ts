@@ -40,9 +40,9 @@ const allowlist = vi.hoisted(() => ({
 	markJobsDone: vi.fn(),
 	markJobsFailed: vi.fn(),
 	markRotationEntryOffList: vi.fn(),
-	markRotationEntryOnList: vi.fn(),
 	markRotationEntryServiced: vi.fn(),
 	requeueForBudget: vi.fn(),
+	reserveRotationSeat: vi.fn(),
 	runAllowlistMutation: vi.fn(),
 }));
 vi.mock("../../../../services/spotify-allowlist", () => allowlist);
@@ -66,6 +66,7 @@ const OFF_LIST_ENTRY = { ...ON_LIST_ENTRY, status: "off_list" as const };
 describe("rotationDispatcherTask", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		allowlist.reserveRotationSeat.mockResolvedValue(true);
 	});
 
 	it("requeues without penalty when the add hits the budget wall, real AllowlistBudgetExhaustedError", async () => {
@@ -103,12 +104,13 @@ describe("rotationDispatcherTask", () => {
 		expect(allowlist.requeueForBudget).not.toHaveBeenCalled();
 	});
 
-	it("reserves the seat (marks on_list) before the real add, and rolls back on failure", async () => {
+	it("reserves the seat before the real add, and rolls back on failure", async () => {
 		allowlist.getNextConsolidatedBatch.mockResolvedValueOnce(BATCH);
 		allowlist.getRotationEntryByUserId.mockResolvedValueOnce(OFF_LIST_ENTRY);
 		const callOrder: string[] = [];
-		allowlist.markRotationEntryOnList.mockImplementationOnce(async () => {
-			callOrder.push("markRotationEntryOnList");
+		allowlist.reserveRotationSeat.mockImplementationOnce(async () => {
+			callOrder.push("reserveRotationSeat");
+			return true;
 		});
 		allowlist.runAllowlistMutation.mockImplementationOnce(async () => {
 			callOrder.push("runAllowlistMutation");
@@ -121,10 +123,22 @@ describe("rotationDispatcherTask", () => {
 		await dispatchNextRotationBatch();
 
 		expect(callOrder).toEqual([
-			"markRotationEntryOnList",
+			"reserveRotationSeat",
 			"runAllowlistMutation",
 			"markRotationEntryOffList",
 		]);
+	});
+
+	it("requeues without penalty when no seat is available, without ever calling Spotify", async () => {
+		allowlist.getNextConsolidatedBatch.mockResolvedValueOnce(BATCH);
+		allowlist.getRotationEntryByUserId.mockResolvedValueOnce(OFF_LIST_ENTRY);
+		allowlist.reserveRotationSeat.mockResolvedValueOnce(false);
+
+		const result = await dispatchNextRotationBatch();
+
+		expect(result).toEqual({ dispatched: false, waitingOnBudget: true });
+		expect(allowlist.requeueForBudget).toHaveBeenCalledWith([1]);
+		expect(allowlist.runAllowlistMutation).not.toHaveBeenCalled();
 	});
 
 	it("skips the add entirely when the entry is already on_list", async () => {
@@ -133,7 +147,7 @@ describe("rotationDispatcherTask", () => {
 
 		await dispatchNextRotationBatch();
 
-		expect(allowlist.markRotationEntryOnList).not.toHaveBeenCalled();
+		expect(allowlist.reserveRotationSeat).not.toHaveBeenCalled();
 		expect(allowlist.runAllowlistMutation).toHaveBeenCalledWith(
 			"friend@example.com",
 			"remove",

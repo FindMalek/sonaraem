@@ -27,21 +27,23 @@ const USERS_URL = () =>
 // No login automation yet (needs Spotify's login/OTP DOM) — a session must already exist.
 class AllowlistAutomationError extends Error {}
 
+// Single source of truth for both the throw site and the check site below — a
+// duplicated literal in each place could silently drift apart and turn every
+// routine budget wait into a hard failure with no compiler signal.
+const BUDGET_EXHAUSTED_MARKER =
+	"budget exhausted for the current rolling 24h window";
+
 // Thrown before ever touching Playwright/Spotify when the rolling-24h budget for this direction is exhausted (docs/decisions/0001) — treat as "try again later", not a real automation failure.
 export class AllowlistBudgetExhaustedError extends Error {
 	constructor(direction: "add" | "remove") {
-		super(
-			`Spotify allowlist ${direction} budget exhausted for the current rolling 24h window`,
-		);
+		super(`Spotify allowlist ${direction} ${BUDGET_EXHAUSTED_MARKER}`);
 		this.name = "AllowlistBudgetExhaustedError";
 	}
 }
 
-// Matches the message above — the only way callers past runAllowlistMutation's runs.poll() boundary can tell a budget wait from a real failure, since only the string (not the class) survives it.
+// The only way callers past runAllowlistMutation's runs.poll() boundary can tell a budget wait from a real failure, since only the string (not the class) survives it.
 export function isBudgetExhaustedMessage(message: string): boolean {
-	return message.includes(
-		"budget exhausted for the current rolling 24h window",
-	);
+	return message.includes(BUDGET_EXHAUSTED_MARKER);
 }
 
 // Exactly one Playwright session for the one automation account — concurrency: 1 is required correctness, not just tidiness (two browsers sharing the same storageState would race on the session save).
