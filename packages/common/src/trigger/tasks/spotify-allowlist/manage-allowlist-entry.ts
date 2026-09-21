@@ -97,110 +97,113 @@ async function safeRecordAllowlistCheckResult(
 	}
 }
 
+// Exported as a plain function (not just via the task wrapper below) so it's directly callable from tests — @trigger.dev/sdk's Task type doesn't expose `.run` publicly.
+export async function manageAllowlistEntry({
+	email,
+	action,
+}: {
+	email: string;
+	action: "add" | "remove";
+}) {
+	let browser: Browser | undefined;
+	try {
+		const sessionState = await loadAllowlistSession();
+		if (!sessionState) {
+			throw new AllowlistAutomationError(
+				"No saved Spotify allowlist session - log in manually once to seed one (login automation isn't built yet)",
+			);
+		}
+
+		// Dynamic, not top-level: a static `import "playwright"` gets bundled into the Vercel function that just calls .triggerAndWait() (never executes this run() body) and crashes there on its missing native browsers.json — this way it only loads where run() actually executes, on Trigger.dev's own infra.
+		const { chromium } = await import("playwright");
+		browser = await chromium.launch({ headless: true });
+		const context = await browser.newContext({
+			storageState: JSON.parse(sessionState),
+		});
+		const page = await context.newPage();
+
+		await page.goto(USERS_URL(), { waitUntil: "domcontentloaded" });
+		const reachedTable = await page
+			.locator('table[data-encore-id="table"]')
+			.waitFor({ state: "visible", timeout: 15_000 })
+			.then(() => true)
+			.catch(() => false);
+
+		if (!reachedTable) {
+			throw new AllowlistAutomationError(
+				"Saved session didn't reach the Users table — it's likely expired (login automation isn't built yet)",
+			);
+		}
+
+		// Check first, mutate only if needed — clicking "add" for an email Spotify already has (or "remove" for one it doesn't) isn't a no-op on their end: it can land on an error/edge-case DOM state that then fails the re-scrape confirmation below, exactly like a real mutation failure.
+		const emailsBefore = await scrapeAllowlistEmails(page);
+		const alreadyInTargetState =
+			action === "add"
+				? emailsBefore.includes(email.toLowerCase())
+				: !emailsBefore.includes(email.toLowerCase());
+
+		if (!alreadyInTargetState) {
+			// Hard gate before ever touching Spotify — cheaper and safer than finding out via a real 429 from Spotify's dashboard.
+			if (!(await hasMutationBudget(action))) {
+				throw new AllowlistBudgetExhaustedError(action);
+			}
+
+			await waitForWriteGap();
+
+			// Recorded before the real action: a crash here should waste a budget unit (safe), never hide one that was actually spent (unsafe).
+			await recordMutation(action, email);
+
+			if (action === "add") {
+				await addAllowlistUser(page, email);
+			} else {
+				await removeAllowlistUser(page, email);
+			}
+			await recordAllowlistWriteNow();
+
+			const emailsAfter = await scrapeAllowlistEmails(page);
+			const present = emailsAfter.includes(email.toLowerCase());
+			const confirmed = action === "add" ? present : !present;
+
+			if (!confirmed) {
+				logger.error(
+					{ email, action, scrapedEmailCount: emailsAfter.length },
+					"Allowlist re-scrape did not confirm the mutation",
+				);
+				throw new AllowlistAutomationError(
+					`Re-scrape didn't confirm "${action}" for ${email} — the dashboard's DOM may have changed`,
+				);
+			}
+		}
+
+		const refreshedState = await context.storageState();
+		await saveAllowlistSession(JSON.stringify(refreshedState));
+		await safeRecordAllowlistCheckResult(null);
+
+		return { confirmed: true };
+	} catch (err) {
+		if (err instanceof AllowlistBudgetExhaustedError) {
+			// Expected, routine — not a health-check failure or an alert-worthy event. Rethrow as-is for the dispatcher's own budget handling (#408).
+			logger.info({ email, action }, err.message);
+			throw err;
+		}
+		const errorMessage = err instanceof Error ? err.message : String(err);
+		logger.error(
+			{ email, action, error: errorMessage },
+			"Spotify allowlist automation failed",
+		);
+		await safeRecordAllowlistCheckResult(errorMessage);
+		await alertAdmin(email, action, err);
+		throw err;
+	} finally {
+		await browser?.close();
+	}
+}
+
 export const manageAllowlistEntryTask = task({
 	id: "spotify-allowlist-manage-entry",
 	queue: allowlistAutomationQueue,
 	retry: { maxAttempts: 1 },
-	run: async ({
-		email,
-		action,
-	}: {
-		email: string;
-		action: "add" | "remove";
-	}) => {
-		let browser: Browser | undefined;
-		try {
-			const sessionState = await loadAllowlistSession();
-			if (!sessionState) {
-				throw new AllowlistAutomationError(
-					"No saved Spotify allowlist session - log in manually once to seed one (login automation isn't built yet)",
-				);
-			}
-
-			// Dynamic, not top-level: a static `import "playwright"` gets bundled into the Vercel function that just calls .triggerAndWait() (never executes this run() body) and crashes there on its missing native browsers.json — this way it only loads where run() actually executes, on Trigger.dev's own infra.
-			const { chromium } = await import("playwright");
-			browser = await chromium.launch({ headless: true });
-			const context = await browser.newContext({
-				storageState: JSON.parse(sessionState),
-			});
-			const page = await context.newPage();
-
-			await page.goto(USERS_URL(), { waitUntil: "domcontentloaded" });
-			const reachedTable = await page
-				.locator('table[data-encore-id="table"]')
-				.waitFor({ state: "visible", timeout: 15_000 })
-				.then(() => true)
-				.catch(() => false);
-
-			if (!reachedTable) {
-				throw new AllowlistAutomationError(
-					"Saved session didn't reach the Users table — it's likely expired (login automation isn't built yet)",
-				);
-			}
-
-			// Check first, mutate only if needed — clicking "add" for an email Spotify already has (or "remove" for one it doesn't) isn't a no-op on their end: it can land on an error/edge-case DOM state that then fails the re-scrape confirmation below, exactly like a real mutation failure.
-			const emailsBefore = await scrapeAllowlistEmails(page);
-			const alreadyInTargetState =
-				action === "add"
-					? emailsBefore.includes(email.toLowerCase())
-					: !emailsBefore.includes(email.toLowerCase());
-
-			if (!alreadyInTargetState) {
-				// Hard gate before ever touching Spotify — cheaper and safer than finding out via a real 429 from Spotify's dashboard.
-				if (!(await hasMutationBudget(action))) {
-					throw new AllowlistBudgetExhaustedError(action);
-				}
-
-				await waitForWriteGap();
-
-				// Recorded before the real action: a crash here should waste a budget unit (safe), never hide one that was actually spent (unsafe).
-				await recordMutation(action, email);
-
-				if (action === "add") {
-					await addAllowlistUser(page, email);
-				} else {
-					await removeAllowlistUser(page, email);
-				}
-				await recordAllowlistWriteNow();
-
-				const emailsAfter = await scrapeAllowlistEmails(page);
-				const present = emailsAfter.includes(email.toLowerCase());
-				const confirmed = action === "add" ? present : !present;
-
-				if (!confirmed) {
-					logger.error(
-						{ email, action, scrapedEmailCount: emailsAfter.length },
-						"Allowlist re-scrape did not confirm the mutation",
-					);
-					throw new AllowlistAutomationError(
-						`Re-scrape didn't confirm "${action}" for ${email} — the dashboard's DOM may have changed`,
-					);
-				}
-			}
-
-			const refreshedState = await context.storageState();
-			await saveAllowlistSession(JSON.stringify(refreshedState));
-			await safeRecordAllowlistCheckResult(null);
-
-			return { confirmed: true };
-		} catch (err) {
-			if (err instanceof AllowlistBudgetExhaustedError) {
-				// Expected, routine — not a health-check failure or an alert-worthy event. Rethrow as-is for the dispatcher's own budget handling (#408).
-				logger.info({ email, action }, err.message);
-				throw err;
-			}
-			const errorMessage = err instanceof Error ? err.message : String(err);
-			logger.error(
-				{ email, action, error: errorMessage },
-				"Spotify allowlist automation failed",
-			);
-			await safeRecordAllowlistCheckResult(errorMessage);
-			await alertAdmin(email, action, err);
-			throw err;
-		} finally {
-			await browser?.close();
-		}
-	},
+	run: manageAllowlistEntry,
 });
 
 // On-demand "does the saved session actually still work" check — no add/remove, so the admin dashboard can offer a test button without needing a real pending signup. Shares the automation queue so it can't race a real add/remove for the one browser session.
