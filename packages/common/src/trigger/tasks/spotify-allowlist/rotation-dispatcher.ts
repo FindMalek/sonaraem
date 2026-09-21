@@ -53,9 +53,7 @@ export async function dispatchNextRotationBatch() {
 
 		// Idempotent if already on-list for some other reason — never re-add what's already added.
 		if (entry.status !== "on_list") {
-			// Same advisory-locked, capacity-rechecked reservation ensureAllowlisted uses for
-			// new admissions — a plain unlocked status flip here could race a concurrent
-			// onboarding sign-in and land both on_list, overshooting the real seat cap.
+			// Same locked, capacity-rechecked reservation ensureAllowlisted uses — a plain unlocked flip here could race a concurrent sign-in and overshoot the seat cap.
 			const seatReserved = await reserveRotationSeat(entry.id);
 			if (!seatReserved) {
 				await requeueForBudget(jobIds);

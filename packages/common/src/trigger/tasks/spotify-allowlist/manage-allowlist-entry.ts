@@ -27,9 +27,7 @@ const USERS_URL = () =>
 // No login automation yet (needs Spotify's login/OTP DOM) — a session must already exist.
 class AllowlistAutomationError extends Error {}
 
-// Single source of truth for both the throw site and the check site below — a
-// duplicated literal in each place could silently drift apart and turn every
-// routine budget wait into a hard failure with no compiler signal.
+// Shared by the throw site and the check site below so they can't drift apart and misclassify a routine budget wait as a hard failure.
 const BUDGET_EXHAUSTED_MARKER =
 	"budget exhausted for the current rolling 24h window";
 
