@@ -2,6 +2,7 @@ import { clearSpotifyNeedsReauth } from "@sonaraem/common/services/music";
 import {
 	AllowlistCapacityError,
 	type AllowlistIdentity,
+	backfillAllowlistEntryUserId,
 	enqueueSnapshotRefresh,
 	ensureAllowlisted,
 	getRotationEntryByUserId,
@@ -96,6 +97,29 @@ async function autoApproveIfWaitlisted(accountUserId: string): Promise<void> {
 				error: err instanceof Error ? err.message : String(err),
 			},
 			"Failed to auto-approve from waitlist on Spotify sign-in",
+		);
+	}
+}
+
+/**
+ * A first-time invite admission (the pre-OAuth `before` hook below,
+ * `ensureAllowlisted`) inserts the allowlist entry keyed by waitlistSignupId
+ * before any account exists, so its userId starts null. Nothing else ever
+ * links it up — without this, getRotationEntryByUserId can never find the
+ * row for this user again, permanently breaking their rotation.
+ */
+async function backfillEntryUserIdIfNeeded(
+	accountUserId: string,
+): Promise<void> {
+	try {
+		await backfillAllowlistEntryUserId(accountUserId);
+	} catch (err) {
+		logger.warn(
+			{
+				userId: accountUserId,
+				error: err instanceof Error ? err.message : String(err),
+			},
+			"Failed to backfill Spotify allowlist entry userId after account link",
 		);
 	}
 }
@@ -235,6 +259,7 @@ export function createDashboardAuth(
 					// unredeemed waitlist entry (#298).
 					after: async (createdAccount) => {
 						if (createdAccount.providerId !== "spotify") return;
+						await backfillEntryUserIdIfNeeded(createdAccount.userId);
 						await Promise.all([
 							clearReauthFlagIfNeeded(createdAccount.userId),
 							autoApproveIfWaitlisted(createdAccount.userId),

@@ -25,6 +25,7 @@ export {
 } from "./permanent-allowlist";
 export type { RotationEntry } from "./rotation-entry";
 export {
+	backfillAllowlistEntryUserId,
 	findDueForRefresh,
 	getRotationEntryByUserId,
 	markRotationEntryOffList,

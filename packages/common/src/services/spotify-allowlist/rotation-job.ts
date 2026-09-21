@@ -1,6 +1,6 @@
 import { db } from "@sonaraem/db";
 import { spotifyRotationJob } from "@sonaraem/db/schema/spotify-allowlist";
-import { and, asc, desc, eq, inArray, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 
 export type RotationJobType = "snapshot_refresh" | "export";
 
@@ -194,21 +194,42 @@ const MAX_JOB_RETRIES = 3;
  * a permanently-failing job (e.g. a dead refresh token) must not sit
  * consuming dispatcher attention forever.
  */
+/**
+ * Split into two typed updates rather than a single raw-SQL CASE expression —
+ * Postgres resolves a CASE branch of untyped string literals to `text`, which
+ * has no implicit assignment cast to a custom enum column, so a one-query
+ * CASE-based status assignment throws against real Postgres even though the
+ * mocked-DB tests can't catch it.
+ */
 export async function markJobsFailed(
 	jobIds: number[],
 	error: string,
 ): Promise<void> {
 	if (jobIds.length === 0) return;
+	const common = {
+		retryCount: sql`${spotifyRotationJob.retryCount} + 1`,
+		lastError: error,
+		// Backoff so a failing job doesn't get re-picked on the very next dispatch tick.
+		eligibleAt: sql`now() + interval '30 minutes'`,
+	};
 	await db
 		.update(spotifyRotationJob)
-		.set({
-			status: sql`CASE WHEN ${spotifyRotationJob.retryCount} + 1 >= ${MAX_JOB_RETRIES} THEN 'failed' ELSE 'queued' END`,
-			retryCount: sql`${spotifyRotationJob.retryCount} + 1`,
-			lastError: error,
-			// Backoff so a failing job doesn't get re-picked on the very next dispatch tick.
-			eligibleAt: sql`now() + interval '30 minutes'`,
-		})
-		.where(inArray(spotifyRotationJob.id, jobIds));
+		.set({ ...common, status: "failed" })
+		.where(
+			and(
+				inArray(spotifyRotationJob.id, jobIds),
+				gte(spotifyRotationJob.retryCount, MAX_JOB_RETRIES - 1),
+			),
+		);
+	await db
+		.update(spotifyRotationJob)
+		.set({ ...common, status: "queued" })
+		.where(
+			and(
+				inArray(spotifyRotationJob.id, jobIds),
+				lt(spotifyRotationJob.retryCount, MAX_JOB_RETRIES - 1),
+			),
+		);
 }
 
 /**

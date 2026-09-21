@@ -1,6 +1,7 @@
 import { db } from "@sonaraem/db";
+import { user } from "@sonaraem/db/schema/auth";
 import { spotifyAllowlistEntry } from "@sonaraem/db/schema/spotify-allowlist";
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, isNull, lte, sql } from "drizzle-orm";
 
 export type RotationEntry = {
 	id: number;
@@ -25,6 +26,35 @@ export async function getRotationEntryByUserId(
 		.where(eq(spotifyAllowlistEntry.userId, userId))
 		.limit(1);
 	return row ?? null;
+}
+
+/**
+ * A first-time invite admission (ensureAllowlisted, gated by waitlistSignupId
+ * before any account exists) inserts the entry with userId null — nothing
+ * else ever backfills it once the real account is created, which left
+ * getRotationEntryByUserId unable to find the row for the app's primary
+ * onboarding path. Call once the account exists (auth's account.create.after)
+ * to link the row by matching email, not by waitlistSignupId, since that
+ * stays correct even if the account's own email differs slightly in case.
+ */
+export async function backfillAllowlistEntryUserId(
+	accountUserId: string,
+): Promise<void> {
+	const [account] = await db
+		.select({ email: user.email })
+		.from(user)
+		.where(eq(user.id, accountUserId));
+	if (!account?.email) return;
+
+	await db
+		.update(spotifyAllowlistEntry)
+		.set({ userId: accountUserId })
+		.where(
+			and(
+				isNull(spotifyAllowlistEntry.userId),
+				sql`lower(${spotifyAllowlistEntry.email}) = lower(${account.email})`,
+			),
+		);
 }
 
 export async function markRotationEntryOnList(id: number): Promise<void> {

@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 
 import { MAX_ALLOWLISTED_REAL_USERS } from "../../constants/spotify-allowlist";
 import { runAllowlistMutation } from "./mutate";
+import { markRotationEntryOffList } from "./rotation-entry";
 
 // Provenance for the entry row only — gating itself matches by email (see ensureAllowlisted), same as Spotify's own allowlist.
 export type AllowlistIdentity =
@@ -104,11 +105,8 @@ export async function ensureAllowlisted(
 		await runAllowlistMutation(email, "add");
 	} catch (err) {
 		if (reserved.reactivated) {
-			// Real onboarding history, not a failed create — roll status back instead of deleting.
-			await db
-				.update(spotifyAllowlistEntry)
-				.set({ status: "off_list" })
-				.where(eq(spotifyAllowlistEntry.id, reserved.id));
+			// Real onboarding history, not a failed create — roll status back instead of deleting. Not inside the transaction here, so free to reuse the shared helper.
+			await markRotationEntryOffList(reserved.id);
 		} else {
 			// Don't leave a row claiming Spotify access that was never actually granted.
 			await db
