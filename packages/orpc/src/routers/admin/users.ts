@@ -3,9 +3,13 @@ import {
 	adminUserDeleteInput,
 	adminUserListInput,
 	adminUserListOutputSchema,
+	adminUserOrganizeNowInput,
+	adminUserOrganizeNowOutputSchema,
 } from "@sonaraem/common/schemas";
+import { organizeUserOnDemand } from "@sonaraem/common/trigger/tasks/organize-weekly-cron";
 import { db } from "@sonaraem/db";
 import { user } from "@sonaraem/db/schema/auth";
+import { spotifyAllowlistEntry } from "@sonaraem/db/schema/spotify-allowlist";
 import { count, desc, eq, ilike, or } from "drizzle-orm";
 import { z } from "zod";
 
@@ -34,8 +38,13 @@ export const adminUsersRouter = {
 						isApproved: user.isApproved,
 						banned: user.banned,
 						createdAt: user.createdAt,
+						nextSyncAt: spotifyAllowlistEntry.nextDueAt,
 					})
 					.from(user)
+					.leftJoin(
+						spotifyAllowlistEntry,
+						eq(spotifyAllowlistEntry.userId, user.id),
+					)
 					.where(where)
 					.orderBy(desc(user.createdAt))
 					.limit(pageSize)
@@ -79,5 +88,17 @@ export const adminUsersRouter = {
 
 			await db.delete(user).where(eq(user.id, input.id));
 			return { success: true };
+		}),
+
+	organizeNow: adminProcedure
+		.input(adminUserOrganizeNowInput)
+		.output(adminUserOrganizeNowOutputSchema)
+		.handler(async ({ input }) => {
+			const result = await organizeUserOnDemand(input.id);
+			return {
+				status: result.status,
+				runId: result.runId,
+				error: result.error,
+			};
 		}),
 };
