@@ -1,6 +1,11 @@
 import { createEnv } from "@t3-oss/env-nextjs";
 import { z } from "zod";
-import { clientModule, observabilityModule, urlsModule } from "../modules";
+import {
+	billingModule,
+	clientModule,
+	observabilityModule,
+	urlsModule,
+} from "../modules";
 import { createNextjsRuntimeEnv } from "../utils/runtime-env";
 import { dbEnv } from "./db";
 
@@ -18,6 +23,7 @@ export const dashboardEnv = createEnv({
 		...observabilityModule.server,
 	},
 	client: {
+		...billingModule.client,
 		...clientModule.client,
 		...urlsModule.client,
 	},
