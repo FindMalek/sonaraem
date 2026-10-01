@@ -1,10 +1,5 @@
+import { SUGGESTED_ARCHETYPE_VALUES } from "@sonaraem/db/schema/cluster";
 import { z } from "zod";
 
-// TODO : move to db schema and import from there
-export const suggestedArchetypeEnum = z.enum([
-	"mood",
-	"situation",
-	"genre",
-	"hybrid",
-]);
+export const suggestedArchetypeEnum = z.enum(SUGGESTED_ARCHETYPE_VALUES);
 export type SuggestedArchetype = z.infer<typeof suggestedArchetypeEnum>;

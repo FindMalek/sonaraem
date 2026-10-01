@@ -16,6 +16,15 @@ import { cluster } from "./cluster";
 import { genreDomain } from "./genre-domain";
 import { track } from "./track";
 
+// Column stays plain text (not pgEnum) to keep migrations cheap — see pipeline-run.ts. @sonaraem/common derives its Zod enum from these values.
+export const TAXONOMY_VALUES = [
+	"mood",
+	"situation",
+	"genre",
+	"hybrid",
+] as const;
+export type Taxonomy = (typeof TAXONOMY_VALUES)[number];
+
 export const playlist = pgTable(
 	"playlist",
 	{
@@ -27,7 +36,7 @@ export const playlist = pgTable(
 		aiGeneratedName: text("ai_generated_name"),
 		description: text("description"),
 		theme: text("theme"),
-		taxonomy: text("taxonomy"),
+		taxonomy: text("taxonomy").$type<Taxonomy>(),
 		genreDomainId: integer("genre_domain_id").references(() => genreDomain.id),
 		energyCurve: jsonb("energy_curve").$type<number[]>(),
 		coverColor: text("cover_color"),
