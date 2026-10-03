@@ -17,6 +17,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { format } from "date-fns";
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { toastError } from "@/shared/api/error-handler";
 import { orpc } from "@/shared/api/orpc";
@@ -61,6 +62,22 @@ export function AdminUsersContent() {
 		}),
 	);
 
+	const { mutate: organizeNow } = useMutation(
+		orpc.admin.users.organizeNow.mutationOptions({
+			onSuccess: (result) => {
+				queryClient.invalidateQueries({ queryKey: orpc.admin.users.key() });
+				if (result.status === "skipped") {
+					toast.info("Already running — a pipeline run is already in progress");
+				} else if (result.status === "failed") {
+					toast.error(result.error ?? "Failed to queue the run");
+				} else {
+					toast.success("Queued — sync, playlists, and the email will follow");
+				}
+			},
+			onError: toastError,
+		}),
+	);
+
 	const columns: ColumnDef<AdminUserItem>[] = [
 		{ accessorKey: "name", header: "Name" },
 		{ accessorKey: "email", header: "Email" },
@@ -100,12 +117,26 @@ export function AdminUsersContent() {
 			cell: ({ row }) => format(new Date(row.original.createdAt), "d MMM yyyy"),
 		},
 		{
+			accessorKey: "nextSyncAt",
+			header: "Next Sync",
+			cell: ({ row }) =>
+				row.original.nextSyncAt ? (
+					format(new Date(row.original.nextSyncAt), "d MMM yyyy")
+				) : (
+					<span className="text-muted-foreground text-sm">—</span>
+				),
+		},
+		{
 			id: "actions",
 			header: "",
 			cell: ({ row }) =>
 				row.original.role === "admin" ? null : (
 					<AdminRowActions
 						actions={[
+							{
+								label: "Run now (sync + playlists + email)",
+								onClick: () => organizeNow({ id: row.original.id }),
+							},
 							{
 								label: "Delete",
 								onClick: () => setDeleteTarget(row.original),
