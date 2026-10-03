@@ -1,5 +1,9 @@
 import { ORPCError } from "@orpc/server";
+import { isPro } from "@sonaraem/common";
+import { db } from "@sonaraem/db";
+import { user } from "@sonaraem/db/schema/auth";
 import { env } from "@sonaraem/env/server";
+import { eq } from "drizzle-orm";
 
 import { rateLimitMiddleware } from "./middleware/rate-limit";
 import { o } from "./os";
@@ -33,6 +37,49 @@ const requireApproved = o.middleware(async ({ context, next }) => {
 });
 
 export const approvedProcedure = protectedProcedure.use(requireApproved);
+
+export const planProcedure = approvedProcedure.use(
+	async ({ context, next }) => {
+		const userId = context.session.user.id;
+		let isProUser = false;
+		let userPlan: "free" | "pro" = "free";
+		let planExpiresAt: Date | null = null;
+
+		if (userId) {
+			const [dbUser] = await db
+				.select({
+					plan: user.plan,
+					planExpiresAt: user.planExpiresAt,
+				})
+				.from(user)
+				.where(eq(user.id, userId))
+				.limit(1);
+
+			if (dbUser) {
+				userPlan = (dbUser.plan as "free" | "pro") || "free";
+				planExpiresAt = dbUser.planExpiresAt;
+				isProUser = isPro({ plan: userPlan, planExpiresAt });
+			}
+		}
+
+		return next({
+			context: {
+				plan: userPlan,
+				planExpiresAt,
+				isPro: isProUser,
+			},
+		});
+	},
+);
+
+export const proProcedure = planProcedure.use(async ({ context, next }) => {
+	if (!context.isPro) {
+		throw new ORPCError("FORBIDDEN", {
+			message: "This feature requires an active Pro plan.",
+		});
+	}
+	return next();
+});
 
 const requireCronOrAuth = o.middleware(async ({ context, next }) => {
 	const cronSecret =

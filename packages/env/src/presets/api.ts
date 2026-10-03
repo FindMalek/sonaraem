@@ -3,6 +3,7 @@ import { baseEnv } from "../base";
 import {
 	aiModule,
 	authModule,
+	billingModule,
 	emailsModule,
 	observabilityModule,
 	spotifyAllowlistModule,
@@ -20,12 +21,14 @@ export const apiEnv = createEnv({
 	server: {
 		...aiModule.server,
 		...authModule.server,
+		...billingModule.server,
 		...emailsModule.server,
 		...observabilityModule.server,
 		...spotifyAllowlistModule.server,
 		...triggerModule.server,
 	},
 	client: {
+		...billingModule.client,
 		...emailsModule.client,
 		...urlsModule.client,
 	},
