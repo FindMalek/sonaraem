@@ -92,32 +92,6 @@ describe("Polar Webhook Verification", () => {
 		},
 	});
 
-	it("verifies with polar-webhook-secret header", () => {
-		const result = verifyPolarWebhookEvent({
-			webhookSecret: secret,
-			payload: samplePayload,
-			headers: {
-				secretHeader: secret,
-			},
-		});
-
-		expect(result).not.toBeNull();
-		expect(result?.type).toBe("subscription.created");
-		expect(result?.data.id).toBe("sub_123");
-	});
-
-	it("rejects when polar-webhook-secret header is incorrect", () => {
-		const result = verifyPolarWebhookEvent({
-			webhookSecret: secret,
-			payload: samplePayload,
-			headers: {
-				secretHeader: "wrong_secret",
-			},
-		});
-
-		expect(result).toBeNull();
-	});
-
 	it("verifies with standard HMAC webhook headers", () => {
 		const id = "msg_123";
 		const timestamp = "1700000000";
@@ -138,6 +112,54 @@ describe("Polar Webhook Verification", () => {
 
 		expect(result).not.toBeNull();
 		expect(result?.type).toBe("subscription.created");
+		expect(result?.data.id).toBe("sub_123");
+	});
+
+	it("verifies with whsec_ base64 encoded secret", () => {
+		const rawKey = "whsec_test_secret_for_base64_hmac";
+		const base64Key = Buffer.from(rawKey).toString("base64");
+		const whsecSecret = `whsec_${base64Key}`;
+		const id = "msg_whsec";
+		const timestamp = "1700000001";
+		const signedPayload = `${id}.${timestamp}.${samplePayload}`;
+		const sig = createHmac("sha256", Buffer.from(base64Key, "base64"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: whsecSecret,
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp,
+				signature: `v1,${sig}`,
+			},
+		});
+
+		expect(result).not.toBeNull();
+		expect(result?.type).toBe("subscription.created");
+	});
+
+	it("verifies when signature header contains multiple space-separated signatures", () => {
+		const id = "msg_123";
+		const timestamp = "1700000000";
+		const signedPayload = `${id}.${timestamp}.${samplePayload}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp,
+				signature: `v1,old_rotated_sig v1,${sig}`,
+			},
+		});
+
+		expect(result).not.toBeNull();
+		expect(result?.type).toBe("subscription.created");
 	});
 
 	it("rejects invalid HMAC signature", () => {
@@ -148,6 +170,198 @@ describe("Polar Webhook Verification", () => {
 				id: "msg_123",
 				timestamp: "1700000000",
 				signature: "v1,invalid_signature",
+			},
+		});
+
+		expect(result).toBeNull();
+	});
+
+	it("rejects forged signature when payload is modified", () => {
+		const id = "msg_123";
+		const timestamp = "1700000000";
+		const signedPayload = `${id}.${timestamp}.${samplePayload}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const tamperedPayload = JSON.stringify({
+			type: "subscription.created",
+			data: {
+				id: "sub_fraud_456",
+				status: "active",
+				customer_id: "cus_fraud",
+			},
+		});
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: tamperedPayload,
+			headers: {
+				id,
+				timestamp,
+				signature: `v1,${sig}`,
+			},
+		});
+
+		expect(result).toBeNull();
+	});
+
+	it("rejects forged signature when timestamp is modified", () => {
+		const id = "msg_123";
+		const timestamp = "1700000000";
+		const signedPayload = `${id}.${timestamp}.${samplePayload}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp: "1799999999",
+				signature: `v1,${sig}`,
+			},
+		});
+
+		expect(result).toBeNull();
+	});
+
+	it("rejects forged signature when id is modified", () => {
+		const id = "msg_123";
+		const timestamp = "1700000000";
+		const signedPayload = `${id}.${timestamp}.${samplePayload}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: samplePayload,
+			headers: {
+				id: "msg_different",
+				timestamp,
+				signature: `v1,${sig}`,
+			},
+		});
+
+		expect(result).toBeNull();
+	});
+
+	it("rejects when webhook secret is empty or whitespace", () => {
+		const id = "msg_123";
+		const timestamp = "1700000000";
+
+		const emptyResult = verifyPolarWebhookEvent({
+			webhookSecret: "",
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp,
+				signature: "v1,some_signature",
+			},
+		});
+		expect(emptyResult).toBeNull();
+
+		const whitespaceResult = verifyPolarWebhookEvent({
+			webhookSecret: "   ",
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp,
+				signature: "v1,some_signature",
+			},
+		});
+		expect(whitespaceResult).toBeNull();
+	});
+
+	it("rejects when required signature headers are missing", () => {
+		expect(
+			verifyPolarWebhookEvent({
+				webhookSecret: secret,
+				payload: samplePayload,
+				headers: {
+					timestamp: "1700000000",
+					signature: "v1,some_signature",
+				},
+			}),
+		).toBeNull();
+
+		expect(
+			verifyPolarWebhookEvent({
+				webhookSecret: secret,
+				payload: samplePayload,
+				headers: {
+					id: "msg_123",
+					signature: "v1,some_signature",
+				},
+			}),
+		).toBeNull();
+
+		expect(
+			verifyPolarWebhookEvent({
+				webhookSecret: secret,
+				payload: samplePayload,
+				headers: {
+					id: "msg_123",
+					timestamp: "1700000000",
+				},
+			}),
+		).toBeNull();
+	});
+
+	it("rejects signature with mismatched length", () => {
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: samplePayload,
+			headers: {
+				id: "msg_123",
+				timestamp: "1700000000",
+				signature: "v1,short",
+			},
+		});
+
+		expect(result).toBeNull();
+	});
+
+	it("rejects invalid JSON payload despite valid HMAC signature", () => {
+		const invalidJson = "{ not-valid-json";
+		const id = "msg_123";
+		const timestamp = "1700000000";
+		const signedPayload = `${id}.${timestamp}.${invalidJson}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: invalidJson,
+			headers: {
+				id,
+				timestamp,
+				signature: `v1,${sig}`,
+			},
+		});
+
+		expect(result).toBeNull();
+	});
+
+	it("rejects payload failing schema validation despite valid HMAC signature", () => {
+		const invalidSchemaJson = JSON.stringify({ wrong: "format" });
+		const id = "msg_123";
+		const timestamp = "1700000000";
+		const signedPayload = `${id}.${timestamp}.${invalidSchemaJson}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: invalidSchemaJson,
+			headers: {
+				id,
+				timestamp,
+				signature: `v1,${sig}`,
 			},
 		});
 

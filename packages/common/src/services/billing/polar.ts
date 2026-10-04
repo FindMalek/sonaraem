@@ -33,67 +33,53 @@ export function verifyPolarWebhookEvent({
 	webhookSecret: string;
 	payload: string;
 	headers: {
-		secretHeader?: string | null;
 		id?: string | null;
 		timestamp?: string | null;
 		signature?: string | null;
 	};
 }): PolarWebhookEvent | null {
-	// 1. Direct secret header comparison (polar-webhook-secret header)
-	if (headers.secretHeader && headers.secretHeader === webhookSecret) {
-		try {
+	if (
+		!webhookSecret ||
+		typeof webhookSecret !== "string" ||
+		webhookSecret.trim() === ""
+	) {
+		return null;
+	}
+
+	if (!headers.id || !headers.timestamp || !headers.signature) {
+		return null;
+	}
+
+	try {
+		const cleanSecret = webhookSecret.startsWith("whsec_")
+			? Buffer.from(webhookSecret.slice(6), "base64")
+			: Buffer.from(webhookSecret, "utf-8");
+
+		const signedPayload = `${headers.id}.${headers.timestamp}.${payload}`;
+		const expectedSignature = createHmac("sha256", cleanSecret)
+			.update(signedPayload)
+			.digest("base64");
+
+		const signatures = headers.signature
+			.split(" ")
+			.map((sig) => (sig.startsWith("v1,") ? sig.slice(3) : sig));
+
+		const isValid = signatures.some((sig) => {
+			const expectedBuffer = Buffer.from(expectedSignature, "utf-8");
+			const sigBuffer = Buffer.from(sig, "utf-8");
+			return (
+				expectedBuffer.length === sigBuffer.length &&
+				timingSafeEqual(expectedBuffer, sigBuffer)
+			);
+		});
+
+		if (isValid) {
 			const parsed = JSON.parse(payload);
 			const validated = polarWebhookEventSchema.safeParse(parsed);
 			return validated.success ? validated.data : null;
-		} catch {
-			return null;
 		}
-	}
-
-	// 2. Standard Webhook / HMAC verification
-	if (headers.id && headers.timestamp && headers.signature) {
-		try {
-			const cleanSecret = webhookSecret.startsWith("whsec_")
-				? Buffer.from(webhookSecret.slice(6), "base64")
-				: Buffer.from(webhookSecret, "utf-8");
-
-			const signedPayload = `${headers.id}.${headers.timestamp}.${payload}`;
-			const expectedSignature = createHmac("sha256", cleanSecret)
-				.update(signedPayload)
-				.digest("base64");
-
-			const signatures = headers.signature
-				.split(" ")
-				.map((sig) => (sig.startsWith("v1,") ? sig.slice(3) : sig));
-
-			const isValid = signatures.some((sig) => {
-				const expectedBuffer = Buffer.from(expectedSignature);
-				const sigBuffer = Buffer.from(sig);
-				return (
-					expectedBuffer.length === sigBuffer.length &&
-					timingSafeEqual(expectedBuffer, sigBuffer)
-				);
-			});
-
-			if (isValid) {
-				const parsed = JSON.parse(payload);
-				const validated = polarWebhookEventSchema.safeParse(parsed);
-				return validated.success ? validated.data : null;
-			}
-		} catch {
-			// Fall through
-		}
-	}
-
-	// 3. Fallback when testing without secret configured
-	if (!webhookSecret) {
-		try {
-			const parsed = JSON.parse(payload);
-			const validated = polarWebhookEventSchema.safeParse(parsed);
-			return validated.success ? validated.data : null;
-		} catch {
-			return null;
-		}
+	} catch {
+		return null;
 	}
 
 	return null;

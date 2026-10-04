@@ -10,27 +10,33 @@ export async function POST(req: NextRequest) {
 	const webhookSecret =
 		apiEnv.SONARAEM_POLAR_WEBHOOK_SECRET || apiEnv.POLAR_WEBHOOK_SECRET;
 
+	if (!webhookSecret) {
+		logger.error("Missing Polar webhook secret for webhook verification");
+		return NextResponse.json(
+			{ error: "Webhook secret is not configured" },
+			{ status: 500 },
+		);
+	}
+
 	const payload = await req.text();
-	const secretHeader = req.headers.get("polar-webhook-secret");
 	const id = req.headers.get("webhook-id") || req.headers.get("svix-id");
 	const timestamp =
 		req.headers.get("webhook-timestamp") || req.headers.get("svix-timestamp");
 	const signature =
 		req.headers.get("webhook-signature") || req.headers.get("svix-signature");
 
-	if (webhookSecret && !secretHeader && (!id || !timestamp || !signature)) {
+	if (!id || !timestamp || !signature) {
 		logger.warn("Missing Polar webhook verification headers");
 		return NextResponse.json(
-			{ error: "Missing webhook signature or secret header" },
+			{ error: "Missing webhook signature headers" },
 			{ status: 400 },
 		);
 	}
 
 	const event = verifyPolarWebhookEvent({
-		webhookSecret: webhookSecret || "",
+		webhookSecret,
 		payload,
 		headers: {
-			secretHeader,
 			id,
 			timestamp,
 			signature,
