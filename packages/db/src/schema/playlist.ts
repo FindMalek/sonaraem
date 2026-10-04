@@ -12,17 +12,12 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
-import { cluster } from "./cluster";
+import { cluster, SUGGESTED_ARCHETYPE_VALUES } from "./cluster";
 import { genreDomain } from "./genre-domain";
 import { track } from "./track";
 
-// Column stays plain text (not pgEnum) to keep migrations cheap — see pipeline-run.ts. @sonaraem/common derives its Zod enum from these values.
-export const TAXONOMY_VALUES = [
-	"mood",
-	"situation",
-	"genre",
-	"hybrid",
-] as const;
+// Plain text column, not pgEnum, to keep migrations cheap.
+export const TAXONOMY_VALUES = SUGGESTED_ARCHETYPE_VALUES;
 export type Taxonomy = (typeof TAXONOMY_VALUES)[number];
 
 export const playlist = pgTable(

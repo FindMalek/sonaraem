@@ -14,7 +14,7 @@ import {
 import { user } from "./auth";
 import { genreDomain } from "./genre-domain";
 
-// Column stays plain text (not pgEnum) to keep migrations cheap — see pipeline-run.ts. @sonaraem/common derives its Zod enum from these values.
+// Plain text column, not pgEnum, to keep migrations cheap.
 export const LYRICS_STATUS_VALUES = [
 	"pending",
 	"found",

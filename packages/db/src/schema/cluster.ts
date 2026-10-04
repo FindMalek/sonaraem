@@ -14,7 +14,6 @@ import { user } from "./auth";
 import { genreDomain } from "./genre-domain";
 import { track } from "./track";
 
-// Single source of truth — @sonaraem/common/schemas/cluster/enum.ts derives its Zod enum from this.
 export const SUGGESTED_ARCHETYPE_VALUES = [
 	"mood",
 	"situation",
