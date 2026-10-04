@@ -14,6 +14,15 @@ import {
 import { user } from "./auth";
 import { genreDomain } from "./genre-domain";
 
+// Plain text column, not pgEnum, to keep migrations cheap.
+export const LYRICS_STATUS_VALUES = [
+	"pending",
+	"found",
+	"not_found",
+	"error",
+] as const;
+export type LyricsStatus = (typeof LYRICS_STATUS_VALUES)[number];
+
 export const track = pgTable(
 	"track",
 	{
@@ -55,7 +64,7 @@ export const track = pgTable(
 		lyricsInstrumental: boolean("lyrics_instrumental"),
 		lrclibId: integer("lrclib_id"),
 		lyricsFetchedAt: timestamp("lyrics_fetched_at"),
-		lyricsStatus: text("lyrics_status"),
+		lyricsStatus: text("lyrics_status").$type<LyricsStatus>(),
 
 		// LLM classification output lives in track_analysis (#113) — see
 		// llmFieldsFromAnalysis for the read-side shape reconstruction.

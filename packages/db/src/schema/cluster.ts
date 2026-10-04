@@ -14,13 +14,21 @@ import { user } from "./auth";
 import { genreDomain } from "./genre-domain";
 import { track } from "./track";
 
+export const SUGGESTED_ARCHETYPE_VALUES = [
+	"mood",
+	"situation",
+	"genre",
+	"hybrid",
+] as const;
+export type SuggestedArchetype = (typeof SUGGESTED_ARCHETYPE_VALUES)[number];
+
 export type ClusterMeta = {
 	themeSummary: string;
 	dominantMood: string;
 	dominantEnergy: string;
 	topThemes: string[];
 	topVibes: string[];
-	suggestedArchetype: "mood" | "situation" | "genre" | "hybrid";
+	suggestedArchetype: SuggestedArchetype;
 };
 
 export const cluster = pgTable(

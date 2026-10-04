@@ -12,9 +12,13 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
-import { cluster } from "./cluster";
+import { cluster, SUGGESTED_ARCHETYPE_VALUES } from "./cluster";
 import { genreDomain } from "./genre-domain";
 import { track } from "./track";
+
+// Plain text column, not pgEnum, to keep migrations cheap.
+export const TAXONOMY_VALUES = SUGGESTED_ARCHETYPE_VALUES;
+export type Taxonomy = (typeof TAXONOMY_VALUES)[number];
 
 export const playlist = pgTable(
 	"playlist",
@@ -27,7 +31,7 @@ export const playlist = pgTable(
 		aiGeneratedName: text("ai_generated_name"),
 		description: text("description"),
 		theme: text("theme"),
-		taxonomy: text("taxonomy"),
+		taxonomy: text("taxonomy").$type<Taxonomy>(),
 		genreDomainId: integer("genre_domain_id").references(() => genreDomain.id),
 		energyCurve: jsonb("energy_curve").$type<number[]>(),
 		coverColor: text("cover_color"),
