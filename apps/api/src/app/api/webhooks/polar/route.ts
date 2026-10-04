@@ -6,11 +6,18 @@ import { apiEnv } from "@sonaraem/env/presets/api";
 import { logger } from "@sonaraem/logger";
 import { type NextRequest, NextResponse } from "next/server";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
 	const webhookSecret =
 		apiEnv.SONARAEM_POLAR_WEBHOOK_SECRET || apiEnv.POLAR_WEBHOOK_SECRET;
 
-	if (!webhookSecret) {
+	if (
+		!webhookSecret ||
+		typeof webhookSecret !== "string" ||
+		webhookSecret.trim() === "" ||
+		webhookSecret.trim() === "whsec_"
+	) {
 		logger.error("Missing Polar webhook secret for webhook verification");
 		return NextResponse.json(
 			{ error: "Webhook secret is not configured" },
@@ -19,11 +26,15 @@ export async function POST(req: NextRequest) {
 	}
 
 	const payload = await req.text();
-	const id = req.headers.get("webhook-id") || req.headers.get("svix-id");
-	const timestamp =
-		req.headers.get("webhook-timestamp") || req.headers.get("svix-timestamp");
-	const signature =
-		req.headers.get("webhook-signature") || req.headers.get("svix-signature");
+	const id = (
+		req.headers.get("webhook-id") || req.headers.get("svix-id")
+	)?.trim();
+	const timestamp = (
+		req.headers.get("webhook-timestamp") || req.headers.get("svix-timestamp")
+	)?.trim();
+	const signature = (
+		req.headers.get("webhook-signature") || req.headers.get("svix-signature")
+	)?.trim();
 
 	if (!id || !timestamp || !signature) {
 		logger.warn("Missing Polar webhook verification headers");
@@ -41,6 +52,7 @@ export async function POST(req: NextRequest) {
 			timestamp,
 			signature,
 		},
+		toleranceInSeconds: process.env.NODE_ENV === "test" ? undefined : 300,
 	});
 
 	if (!event) {

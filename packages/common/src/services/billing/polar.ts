@@ -29,6 +29,7 @@ export function verifyPolarWebhookEvent({
 	webhookSecret,
 	payload,
 	headers,
+	toleranceInSeconds,
 }: {
 	webhookSecret: string;
 	payload: string;
@@ -37,6 +38,7 @@ export function verifyPolarWebhookEvent({
 		timestamp?: string | null;
 		signature?: string | null;
 	};
+	toleranceInSeconds?: number;
 }): PolarWebhookEvent | null {
 	if (
 		!webhookSecret ||
@@ -46,23 +48,56 @@ export function verifyPolarWebhookEvent({
 		return null;
 	}
 
-	if (!headers.id || !headers.timestamp || !headers.signature) {
+	if (typeof payload !== "string") {
 		return null;
 	}
 
-	try {
-		const cleanSecret = webhookSecret.startsWith("whsec_")
-			? Buffer.from(webhookSecret.slice(6), "base64")
-			: Buffer.from(webhookSecret, "utf-8");
+	const id = headers.id?.trim();
+	const timestamp = headers.timestamp?.trim();
+	const signature = headers.signature?.trim();
 
-		const signedPayload = `${headers.id}.${headers.timestamp}.${payload}`;
+	if (!id || !timestamp || !signature) {
+		return null;
+	}
+
+	if (toleranceInSeconds !== undefined && toleranceInSeconds > 0) {
+		const timestampSec = Number.parseInt(timestamp, 10);
+		if (Number.isNaN(timestampSec)) {
+			return null;
+		}
+		const nowSec = Math.floor(Date.now() / 1000);
+		if (Math.abs(nowSec - timestampSec) > toleranceInSeconds) {
+			return null;
+		}
+	}
+
+	try {
+		const trimmedSecret = webhookSecret.trim();
+		if (trimmedSecret === "whsec_") {
+			return null;
+		}
+
+		const cleanSecret = trimmedSecret.startsWith("whsec_")
+			? Buffer.from(trimmedSecret.slice(6), "base64")
+			: Buffer.from(trimmedSecret, "utf-8");
+
+		if (cleanSecret.length === 0) {
+			return null;
+		}
+
+		const signedPayload = `${id}.${timestamp}.${payload}`;
 		const expectedSignature = createHmac("sha256", cleanSecret)
 			.update(signedPayload)
 			.digest("base64");
 
-		const signatures = headers.signature
-			.split(" ")
-			.map((sig) => (sig.startsWith("v1,") ? sig.slice(3) : sig));
+		const signatures = signature
+			.split(/\s+/)
+			.filter((sig) => sig.startsWith("v1,"))
+			.map((sig) => sig.slice(3));
+
+		if (signatures.length === 0) {
+			return null;
+		}
 
 		const isValid = signatures.some((sig) => {
 			const expectedBuffer = Buffer.from(expectedSignature, "utf-8");

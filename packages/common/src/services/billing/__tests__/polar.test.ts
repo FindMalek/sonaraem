@@ -367,6 +367,211 @@ describe("Polar Webhook Verification", () => {
 
 		expect(result).toBeNull();
 	});
+
+	it("rejects when webhook secret is whsec_ with empty base64 content", () => {
+		const id = "msg_123";
+		const timestamp = "1700000000";
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: "whsec_",
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp,
+				signature: "v1,some_signature",
+			},
+		});
+
+		expect(result).toBeNull();
+	});
+
+	it("verifies when webhook secret has leading or trailing whitespace", () => {
+		const id = "msg_123";
+		const timestamp = "1700000000";
+		const signedPayload = `${id}.${timestamp}.${samplePayload}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: `  ${secret}  \n`,
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp,
+				signature: `v1,${sig}`,
+			},
+		});
+
+		expect(result).not.toBeNull();
+		expect(result?.type).toBe("subscription.created");
+	});
+
+	it("rejects when signature header contains only unsupported versions", () => {
+		const id = "msg_123";
+		const timestamp = "1700000000";
+		const signedPayload = `${id}.${timestamp}.${samplePayload}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp,
+				signature: `v2,${sig}`,
+			},
+		});
+
+		expect(result).toBeNull();
+	});
+
+	it("verifies when valid v1 signature is mixed with unknown version signatures", () => {
+		const id = "msg_123";
+		const timestamp = "1700000000";
+		const signedPayload = `${id}.${timestamp}.${samplePayload}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp,
+				signature: `v2,unknown_sig   v1,${sig}`,
+			},
+		});
+
+		expect(result).not.toBeNull();
+		expect(result?.type).toBe("subscription.created");
+	});
+
+	it("rejects when headers contain only whitespace", () => {
+		expect(
+			verifyPolarWebhookEvent({
+				webhookSecret: secret,
+				payload: samplePayload,
+				headers: {
+					id: "   ",
+					timestamp: "1700000000",
+					signature: "v1,some_signature",
+				},
+			}),
+		).toBeNull();
+
+		expect(
+			verifyPolarWebhookEvent({
+				webhookSecret: secret,
+				payload: samplePayload,
+				headers: {
+					id: "msg_123",
+					timestamp: "   ",
+					signature: "v1,some_signature",
+				},
+			}),
+		).toBeNull();
+
+		expect(
+			verifyPolarWebhookEvent({
+				webhookSecret: secret,
+				payload: samplePayload,
+				headers: {
+					id: "msg_123",
+					timestamp: "1700000000",
+					signature: "   ",
+				},
+			}),
+		).toBeNull();
+	});
+
+	it("rejects when payload is not a string", () => {
+		const id = "msg_123";
+		const timestamp = "1700000000";
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			// @ts-expect-error - testing invalid payload type
+			payload: { invalid: true },
+			headers: {
+				id,
+				timestamp,
+				signature: "v1,some_signature",
+			},
+		});
+
+		expect(result).toBeNull();
+	});
+
+	it("enforces timestamp tolerance and rejects expired timestamps", () => {
+		const id = "msg_123";
+		const expiredTimestamp = String(Math.floor(Date.now() / 1000) - 600);
+		const signedPayload = `${id}.${expiredTimestamp}.${samplePayload}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp: expiredTimestamp,
+				signature: `v1,${sig}`,
+			},
+			toleranceInSeconds: 300,
+		});
+
+		expect(result).toBeNull();
+	});
+
+	it("accepts timestamps within configured tolerance window", () => {
+		const id = "msg_123";
+		const freshTimestamp = String(Math.floor(Date.now() / 1000) - 30);
+		const signedPayload = `${id}.${freshTimestamp}.${samplePayload}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp: freshTimestamp,
+				signature: `v1,${sig}`,
+			},
+			toleranceInSeconds: 300,
+		});
+
+		expect(result).not.toBeNull();
+		expect(result?.type).toBe("subscription.created");
+	});
+
+	it("rejects non-numeric timestamp when tolerance is configured", () => {
+		const id = "msg_123";
+		const invalidTimestamp = "not-a-timestamp";
+		const signedPayload = `${id}.${invalidTimestamp}.${samplePayload}`;
+		const sig = createHmac("sha256", Buffer.from(secret, "utf-8"))
+			.update(signedPayload)
+			.digest("base64");
+
+		const result = verifyPolarWebhookEvent({
+			webhookSecret: secret,
+			payload: samplePayload,
+			headers: {
+				id,
+				timestamp: invalidTimestamp,
+				signature: `v1,${sig}`,
+			},
+			toleranceInSeconds: 300,
+		});
+
+		expect(result).toBeNull();
+	});
 });
 
 describe("Polar Webhook Processing", () => {
