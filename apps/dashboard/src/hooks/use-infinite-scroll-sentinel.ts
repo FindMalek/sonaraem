@@ -1,6 +1,6 @@
 "use client";
 
-import { type RefObject, useEffect, useRef } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 
 /**
  * A single, stable IntersectionObserver for the lifetime of the sentinel.
@@ -21,12 +21,11 @@ export function useInfiniteScrollSentinel({
 	isFetchingNextPage: boolean;
 	fetchNextPage: () => void;
 }) {
-	const sentinelRef = useRef<HTMLDivElement>(null);
+	const [sentinel, setSentinel] = useState<HTMLDivElement | null>(null);
 	const stateRef = useRef({ hasNextPage, isFetchingNextPage, fetchNextPage });
 	stateRef.current = { hasNextPage, isFetchingNextPage, fetchNextPage };
 
 	useEffect(() => {
-		const sentinel = sentinelRef.current;
 		const root = rootRef.current;
 		if (!sentinel || !root) return;
 
@@ -45,7 +44,7 @@ export function useInfiniteScrollSentinel({
 		);
 		observer.observe(sentinel);
 		return () => observer.disconnect();
-	}, [rootRef]);
+	}, [rootRef, sentinel]);
 
-	return sentinelRef;
+	return setSentinel;
 }
