@@ -16,6 +16,8 @@ export const adminUserItemSchema = z.object({
 	isApproved: z.boolean(),
 	banned: z.boolean(),
 	createdAt: z.date(),
+	// Rotation-v2's nextDueAt (docs/decisions/0001) — null if never onboarded into the rotation yet.
+	nextSyncAt: z.date().nullable(),
 });
 export type AdminUserItem = z.infer<typeof adminUserItemSchema>;
 
@@ -32,3 +34,19 @@ export const adminUserDeleteInput = z.object({
 	id: z.string(),
 });
 export type AdminUserDeleteInput = z.infer<typeof adminUserDeleteInput>;
+
+export const adminUserOrganizeNowInput = z.object({
+	id: z.string(),
+});
+export type AdminUserOrganizeNowInput = z.infer<
+	typeof adminUserOrganizeNowInput
+>;
+
+export const adminUserOrganizeNowOutputSchema = z.object({
+	status: z.enum(["completed", "failed", "skipped"]),
+	runId: z.number(),
+	error: z.string().optional(),
+});
+export type AdminUserOrganizeNowOutput = z.infer<
+	typeof adminUserOrganizeNowOutputSchema
+>;
