@@ -13,10 +13,11 @@ import { ScrollToTopButton } from "@/components/shared/scroll-to-top-button";
 import { useDashboardScrollContainer } from "@/hooks/use-dashboard-scroll-container";
 import { useInfiniteScrollSentinel } from "@/hooks/use-infinite-scroll-sentinel";
 import { useScrollFlags } from "@/hooks/use-scroll-flags";
+import { cn } from "@/lib/utils";
 import { usePlaylistsController } from "@/shared/lib/playlists/controller.hook";
 
 export default function PlaylistsPage() {
-	const { list } = usePlaylistsController();
+	const { list, filters, clearFilters } = usePlaylistsController();
 	const {
 		data,
 		isLoading,
@@ -26,6 +27,7 @@ export default function PlaylistsPage() {
 		fetchNextPage,
 		hasNextPage,
 		isFetchingNextPage,
+		isPlaceholderData,
 	} = list;
 
 	const scrollContainerRef = useDashboardScrollContainer();
@@ -42,11 +44,12 @@ export default function PlaylistsPage() {
 	});
 
 	const playlists = data?.pages.flatMap((page) => page.items) ?? [];
+	const hasActiveFilters = filters.tags.length > 0;
 
 	if (isError) {
 		return (
 			<div className="space-y-8">
-				<DashboardPlaylistsPageHeader hasPlaylists={false} />
+				<DashboardPlaylistsPageHeader hasPlaylists={hasActiveFilters} />
 				<ErrorState
 					message={
 						error instanceof Error ? error.message : "Failed to load playlists"
@@ -68,9 +71,31 @@ export default function PlaylistsPage() {
 
 	return (
 		<div className="space-y-8">
-			<DashboardPlaylistsPageHeader hasPlaylists={Boolean(playlists.length)} />
+			<DashboardPlaylistsPageHeader
+				hasPlaylists={playlists.length > 0 || hasActiveFilters}
+			/>
 
-			{playlists.length === 0 ? (
+			{playlists.length > 0 ? (
+				<div
+					aria-busy={isPlaceholderData}
+					className={cn(
+						"divide-y divide-border transition-opacity",
+						isPlaceholderData && "opacity-60",
+					)}
+				>
+					{playlists.map((pl) => (
+						<DashboardPlaylistsListRow key={pl.id} playlist={pl} />
+					))}
+				</div>
+			) : hasActiveFilters ? (
+				<EmptyState
+					icon={Icons.filter}
+					title="No matching playlists"
+					description="Try different tags."
+					action={{ label: "Clear filters", onClick: clearFilters }}
+					variant="card"
+				/>
+			) : (
 				<EmptyState
 					icon={Icons.disc}
 					title="No playlists yet"
@@ -83,15 +108,11 @@ export default function PlaylistsPage() {
 					}}
 					variant="card"
 				/>
-			) : (
-				<div className="divide-y divide-border">
-					{playlists.map((pl) => (
-						<DashboardPlaylistsListRow key={pl.id} playlist={pl} />
-					))}
-				</div>
 			)}
 
-			{hasNextPage ? <div ref={sentinelRef} className="h-1" /> : null}
+			{hasNextPage && !isPlaceholderData ? (
+				<div ref={sentinelRef} className="h-1" />
+			) : null}
 
 			<ScrollToTopButton
 				visible={showBackToTop}
