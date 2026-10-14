@@ -2,7 +2,10 @@ import { clearSpotifyNeedsReauth } from "@sonaraem/common/services/music";
 import {
 	AllowlistCapacityError,
 	type AllowlistIdentity,
+	backfillAllowlistEntryUserId,
+	enqueueSnapshotRefresh,
 	ensureAllowlisted,
+	getRotationEntryByUserId,
 } from "@sonaraem/common/services/spotify-allowlist";
 import {
 	getWaitlistInviteIdentity,
@@ -94,6 +97,56 @@ async function autoApproveIfWaitlisted(accountUserId: string): Promise<void> {
 				error: err instanceof Error ? err.message : String(err),
 			},
 			"Failed to auto-approve from waitlist on Spotify sign-in",
+		);
+	}
+}
+
+/**
+ * A first-time invite admission (the pre-OAuth `before` hook below,
+ * `ensureAllowlisted`) inserts the allowlist entry keyed by waitlistSignupId
+ * before any account exists, so its userId starts null. Nothing else ever
+ * links it up — without this, getRotationEntryByUserId can never find the
+ * row for this user again, permanently breaking their rotation.
+ */
+async function backfillEntryUserIdIfNeeded(
+	accountUserId: string,
+): Promise<void> {
+	try {
+		await backfillAllowlistEntryUserId(accountUserId);
+	} catch (err) {
+		logger.warn(
+			{
+				userId: accountUserId,
+				error: err instanceof Error ? err.message : String(err),
+			},
+			"Failed to backfill Spotify allowlist entry userId after account link",
+		);
+	}
+}
+
+/**
+ * First-ever Spotify link only (#290) — the user is already on the real
+ * allowlist by this point (the pre-OAuth `before` hook below put them there),
+ * so queue their initial sync now instead of waiting for them to find a
+ * "sync now" button. This hook also fires on re-auth after Better Auth
+ * re-links an existing account, not just true first-time links, so gate on
+ * `lastServicedAt` being unset — a user who's already been serviced once
+ * doesn't need another sync just because their token refreshed.
+ */
+async function enqueueInitialSyncIfNeeded(
+	accountUserId: string,
+): Promise<void> {
+	try {
+		const entry = await getRotationEntryByUserId(accountUserId);
+		if (entry?.lastServicedAt) return;
+		await enqueueSnapshotRefresh(accountUserId);
+	} catch (err) {
+		logger.warn(
+			{
+				userId: accountUserId,
+				error: err instanceof Error ? err.message : String(err),
+			},
+			"Failed to enqueue initial Spotify sync after account link",
 		);
 	}
 }
@@ -206,9 +259,11 @@ export function createDashboardAuth(
 					// unredeemed waitlist entry (#298).
 					after: async (createdAccount) => {
 						if (createdAccount.providerId !== "spotify") return;
+						await backfillEntryUserIdIfNeeded(createdAccount.userId);
 						await Promise.all([
 							clearReauthFlagIfNeeded(createdAccount.userId),
 							autoApproveIfWaitlisted(createdAccount.userId),
+							enqueueInitialSyncIfNeeded(createdAccount.userId),
 						]);
 					},
 				},

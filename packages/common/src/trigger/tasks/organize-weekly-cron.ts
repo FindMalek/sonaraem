@@ -104,72 +104,79 @@ export type OrganizeAllUsersResult = {
 };
 
 // triggeredBy: "cron" is what makes send-organize-complete.ts send the weekly digest email.
+async function organizeUserNow(
+	id: string,
+	triggeredBy: "user" | "cron",
+): Promise<OrganizeAllUsersResult> {
+	try {
+		const insertResult = await insertRunOrSkip(id, triggeredBy);
+
+		if (insertResult.kind === "skipped") {
+			logger.info(
+				{ userId: id, existingRunId: insertResult.runId },
+				"organize run skipped for user — a run is already in progress",
+			);
+			return {
+				userId: id,
+				runId: insertResult.runId,
+				status: "skipped",
+				error: "A pipeline run is already in progress",
+			};
+		}
+
+		const runId = insertResult.runId;
+
+		try {
+			await organizePipeline.trigger({ userId: id, runId });
+			return { userId: id, runId, status: "completed" };
+		} catch (triggerErr) {
+			const error =
+				triggerErr instanceof Error
+					? triggerErr
+					: new Error(String(triggerErr));
+			await updateRun(runId, {
+				status: "failed",
+				error: error.message,
+				completedAt: new Date(),
+			});
+			logger.error(
+				{ userId: id, runId, error: error.message },
+				"Failed to queue organize for user",
+			);
+			return { userId: id, runId, status: "failed", error: error.message };
+		}
+	} catch (err) {
+		const error = err instanceof Error ? err : new Error(String(err));
+		logger.error(
+			{ userId: id, error: error.message },
+			"Failed to queue organize for user",
+		);
+		return { userId: id, runId: -1, status: "failed", error: error.message };
+	}
+}
+
 export async function runOrganizeForAllUsers(): Promise<
 	OrganizeAllUsersResult[]
 > {
 	const userIds = await nextEligibleForCron(CRON_BATCH_SIZE);
 	const results: OrganizeAllUsersResult[] = [];
-
 	for (const id of userIds) {
-		try {
-			const insertResult = await insertRunOrSkip(id, "cron");
-
-			if (insertResult.kind === "skipped") {
-				logger.info(
-					{ userId: id, existingRunId: insertResult.runId },
-					"organize run skipped for user — a run is already in progress",
-				);
-				results.push({
-					userId: id,
-					runId: insertResult.runId,
-					status: "skipped",
-					error: "A pipeline run is already in progress",
-				});
-				continue;
-			}
-
-			const runId = insertResult.runId;
-
-			try {
-				await organizePipeline.trigger({ userId: id, runId });
-				results.push({ userId: id, runId, status: "completed" });
-			} catch (triggerErr) {
-				const error =
-					triggerErr instanceof Error
-						? triggerErr
-						: new Error(String(triggerErr));
-				await updateRun(runId, {
-					status: "failed",
-					error: error.message,
-					completedAt: new Date(),
-				});
-				logger.error(
-					{ userId: id, runId, error: error.message },
-					"Failed to queue organize for user",
-				);
-				results.push({
-					userId: id,
-					runId,
-					status: "failed",
-					error: error.message,
-				});
-			}
-		} catch (err) {
-			const error = err instanceof Error ? err : new Error(String(err));
-			logger.error(
-				{ userId: id, error: error.message },
-				"Failed to queue organize for user",
-			);
-			results.push({
-				userId: id,
-				runId: -1,
-				status: "failed",
-				error: error.message,
-			});
-		}
+		results.push(await organizeUserNow(id, "cron"));
 	}
-
 	return results;
+}
+
+/**
+ * Admin-forced immediate run for one user, bypassing the staleness check in
+ * nextEligibleForCron entirely. Uses triggeredBy "cron" (not "user") on
+ * purpose — that's what routes send-organize-complete.ts to the weekly
+ * digest email instead of the plain manual-run one, since the point of this
+ * action is "send them the digest now" rather than a generic completion note.
+ */
+export async function organizeUserOnDemand(
+	userId: string,
+): Promise<OrganizeAllUsersResult> {
+	return organizeUserNow(userId, "cron");
 }
 
 export const organizeWeeklyCronTask = schedules.task({
