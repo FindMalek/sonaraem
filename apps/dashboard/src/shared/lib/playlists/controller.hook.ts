@@ -1,6 +1,7 @@
 "use client";
 
 import {
+	keepPreviousData,
 	useInfiniteQuery,
 	useMutation,
 	useQuery,
@@ -20,17 +21,19 @@ export function usePlaylistsController(updateOnSuccess?: () => void) {
 	const store = usePlaylistsStore();
 	const queryClient = useQueryClient();
 
-	const list = useInfiniteQuery(
-		orpc.playlists.list.infiniteOptions({
+	const list = useInfiniteQuery({
+		...orpc.playlists.list.infiniteOptions({
 			input: (cursor: number | null) => ({
 				cursor,
 				limit: PLAYLISTS_PAGE_SIZE,
 				sort: store.sort,
+				...store.filters,
 			}),
 			initialPageParam: null,
 			getNextPageParam: (lastPage) => lastPage.nextCursor,
 		}),
-	);
+		placeholderData: keepPreviousData,
+	});
 
 	const detail = useQuery({
 		...orpc.playlists.getById.queryOptions({
@@ -90,6 +93,11 @@ export function usePlaylistsController(updateOnSuccess?: () => void) {
 		exportAllMutation,
 		updateMutation,
 	};
+}
+
+export function usePlaylistTagsController() {
+	const tags = useQuery(orpc.playlists.listTags.queryOptions({ input: {} }));
+	return { tags };
 }
 
 export function usePlaylistTracksController(playlistId: number) {

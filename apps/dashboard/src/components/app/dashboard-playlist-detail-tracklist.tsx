@@ -1,5 +1,5 @@
 import { Skeleton } from "@sonaraem/ui";
-import type { RefObject } from "react";
+import type { RefCallback } from "react";
 import { DashboardPlaylistDetailSectionLabel } from "./dashboard-playlist-detail-section-label";
 import type { DashboardPlaylistDetailTrackRowTrack } from "./dashboard-playlist-detail-track-row";
 import { DashboardPlaylistDetailTrackRow } from "./dashboard-playlist-detail-track-row";
@@ -22,7 +22,7 @@ export function DashboardPlaylistDetailTracklist({
 	tracks: DashboardPlaylistDetailTrackRowTrack[];
 	isLoading: boolean;
 	hasNextPage: boolean;
-	sentinelRef: RefObject<HTMLDivElement | null>;
+	sentinelRef: RefCallback<HTMLDivElement>;
 }) {
 	return (
 		<section className="flex flex-col">

@@ -7,7 +7,7 @@ import type {
 } from "@sonaraem/common/schemas";
 import { DASHBOARD_ROUTES } from "@sonaraem/common/utils/routes";
 import { Skeleton } from "@sonaraem/ui";
-import type { RefObject } from "react";
+import type { RefCallback } from "react";
 import { DashboardDetailBackLink } from "@/components/shared/dashboard-detail-back-link";
 import { DashboardPlaylistDetailActions } from "./dashboard-playlist-detail-actions";
 import { DashboardPlaylistDetailHeader } from "./dashboard-playlist-detail-header";
@@ -38,7 +38,7 @@ export function DashboardPlaylistDetail({
 	tracks: PlaylistTrackItem[];
 	tracksLoading: boolean;
 	hasNextTracksPage: boolean;
-	tracksSentinelRef: RefObject<HTMLDivElement | null>;
+	tracksSentinelRef: RefCallback<HTMLDivElement>;
 	scrolled: boolean;
 	trackSearch: string;
 	onTrackSearchChange: (value: string) => void;
