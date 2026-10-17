@@ -36,6 +36,9 @@ export function useSettingsController() {
 	const emailPreferences = useQuery(
 		orpc.emailPreferences.get.queryOptions({ input: {} }),
 	);
+	const billingPlan = useQuery(
+		orpc.billing.getPlan.queryOptions({ input: {} }),
+	);
 	const updateEmailPreferences = useMutation(
 		orpc.emailPreferences.update.mutationOptions({
 			onSuccess: () => {
@@ -79,6 +82,14 @@ export function useSettingsController() {
 		needsReauth: libraryStats.data?.needsReauth ?? false,
 		emailPreferences: emailPreferences.data ?? null,
 		emailPreferencesLoading: emailPreferences.isLoading,
+		plan: billingPlan.data?.plan ?? "free",
+		isPro: billingPlan.data?.isPro ?? false,
+		planExpiresAt: billingPlan.data?.planExpiresAt
+			? new Date(billingPlan.data.planExpiresAt)
+			: null,
+		planLoading: billingPlan.isLoading,
+		checkoutUrl: billingPlan.data?.checkoutUrl ?? null,
+		portalUrl: billingPlan.data?.portalUrl ?? null,
 		updateEmailPreferences,
 		theme,
 		resolvedTheme,

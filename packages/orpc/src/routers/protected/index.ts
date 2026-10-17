@@ -7,6 +7,7 @@ import { waitlistSignup } from "@sonaraem/db/schema/waitlist-signup";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { approvedProcedure, protectedProcedure } from "../../procedures";
+import { billingRouter } from "./billing";
 import { clustersRouter } from "./clusters";
 import { emailPreferencesRouter } from "./email-preferences";
 import { feedbackRouter } from "./feedback";
@@ -108,6 +109,7 @@ export const protectedRouter = {
 	emailPreferences: emailPreferencesRouter,
 	insights: insightsRouter,
 	feedback: feedbackRouter,
+	billing: billingRouter,
 };
 
 export type ProtectedRouter = typeof protectedRouter;
