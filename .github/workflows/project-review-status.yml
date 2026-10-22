@@ -13,7 +13,7 @@ on:
 jobs:
   sync-status:
     if: github.event.review.state == 'changes_requested' || github.event.review.state == 'approved'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, the-keep]
     timeout-minutes: 5
     permissions:
       contents: read
