@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   star-chart:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, the-keep]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
