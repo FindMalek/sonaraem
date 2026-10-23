@@ -316,6 +316,20 @@
 			"when": 1789053843584,
 			"tag": "0044_hot_lady_vermin",
 			"breakpoints": true
+		},
+		{
+			"idx": 45,
+			"version": "7",
+			"when": 1789676162209,
+			"tag": "0045_strange_betty_ross",
+			"breakpoints": true
+		},
+		{
+			"idx": 46,
+			"version": "7",
+			"when": 1789942942946,
+			"tag": "0046_cute_big_bertha",
+			"breakpoints": true
 		}
 	]
 }
