@@ -129,6 +129,12 @@
 		"./utils/waitlist-gate": {
 			"default": "./src/utils/waitlist-gate.ts"
 		},
+		"./utils/plan": {
+			"default": "./src/utils/plan.ts"
+		},
+		"./services/billing": {
+			"default": "./src/services/billing/index.ts"
+		},
 		"./constants": {
 			"default": "./src/constants/index.ts"
 		}
