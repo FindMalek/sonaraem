@@ -9,9 +9,13 @@ import {
 	Icons,
 } from "@sonaraem/ui";
 import { useOrganizeController } from "@/shared/lib/organize/controller.hook";
-import { usePlaylistsController } from "@/shared/lib/playlists/controller.hook";
+import {
+	usePlaylistsController,
+	usePlaylistTagsController,
+} from "@/shared/lib/playlists/controller.hook";
 import { PageHeader } from "../shared/page-header";
 import { DashboardPlaylistsSortSelect } from "./dashboard-playlists-sort-select";
+import { DashboardPlaylistsTagFilter } from "./dashboard-playlists-tag-filter";
 
 export function DashboardPlaylistsPageHeader({
 	hasPlaylists,
@@ -23,7 +27,11 @@ export function DashboardPlaylistsPageHeader({
 		exportAllMutation: exportMutation,
 		sort,
 		setSort,
+		filters,
+		toggleTagFilter,
+		clearFilters,
 	} = usePlaylistsController();
+	const { tags } = usePlaylistTagsController();
 	const isBusy = exportMutation.isPending || organizeMutation.isPending;
 
 	return (
@@ -33,6 +41,15 @@ export function DashboardPlaylistsPageHeader({
 				description="Generated from your taste."
 			/>
 			<div className="flex shrink-0 items-center gap-2">
+				{hasPlaylists ? (
+					<DashboardPlaylistsTagFilter
+						options={tags.data ?? []}
+						selected={filters.tags}
+						status={tags.status}
+						onToggle={toggleTagFilter}
+						onClear={clearFilters}
+					/>
+				) : null}
 				{hasPlaylists ? (
 					<DashboardPlaylistsSortSelect value={sort} onChange={setSort} />
 				) : null}
