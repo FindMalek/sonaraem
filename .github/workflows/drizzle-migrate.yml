@@ -20,7 +20,7 @@ on:
 
 jobs:
   migrate:
-    runs-on: [self-hosted, the-keep]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
