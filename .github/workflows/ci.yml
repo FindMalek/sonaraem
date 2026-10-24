@@ -17,7 +17,7 @@ on:
 
 jobs:
   lint:
-    runs-on: [self-hosted, the-keep]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
         run: node scripts/check-comment-blocks.mjs "origin/${{ github.event.pull_request.base.ref || 'main' }}"
 
   build:
-    runs-on: [self-hosted, the-keep]
+    runs-on: ubuntu-latest
     env:
       # SKIP_ENV_VALIDATION only bypasses the zod schema check — several pages/routes
       # (e.g. admin's /setup) still read these values directly during static generation
@@ -81,7 +81,7 @@ jobs:
         run: pnpm build
 
   test:
-    runs-on: [self-hosted, the-keep]
+    runs-on: ubuntu-latest
     env:
       SKIP_ENV_VALIDATION: "true"
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
