@@ -90,6 +90,12 @@
 		"./trigger/tasks/spotify-allowlist/manage-allowlist-entry": {
 			"default": "./src/trigger/tasks/spotify-allowlist/manage-allowlist-entry.ts"
 		},
+		"./trigger/tasks/spotify-allowlist/rotation-dispatcher": {
+			"default": "./src/trigger/tasks/spotify-allowlist/rotation-dispatcher.ts"
+		},
+		"./trigger/tasks/spotify-allowlist/snapshot-due-scanner": {
+			"default": "./src/trigger/tasks/spotify-allowlist/snapshot-due-scanner.ts"
+		},
 		"./services/brain": {
 			"default": "./src/services/brain/index.ts"
 		},

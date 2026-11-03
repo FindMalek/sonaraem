@@ -1,10 +1,10 @@
 import { db } from "@sonaraem/db";
 import { spotifyAllowlistEntry } from "@sonaraem/db/schema/spotify-allowlist";
-import { runs } from "@trigger.dev/sdk";
 import { eq, sql } from "drizzle-orm";
 
 import { MAX_ALLOWLISTED_REAL_USERS } from "../../constants/spotify-allowlist";
-import { manageAllowlistEntryTask } from "../../trigger/tasks/spotify-allowlist/manage-allowlist-entry";
+import { runAllowlistMutation } from "./mutate";
+import { markRotationEntryOffList } from "./rotation-entry";
 
 // Provenance for the entry row only — gating itself matches by email (see ensureAllowlisted), same as Spotify's own allowlist.
 export type AllowlistIdentity =
@@ -22,25 +22,61 @@ export type EnsureAllowlistedResult = {
 	alreadyAllowlisted: boolean;
 };
 
-/** True if `email` is already on the permanent allowlist — lets a reconnect skip the gate with no Spotify call at all. */
+/** True if `email` currently occupies a rotating seat — lets a reconnect skip the gate with no Spotify call at all. An `off_list` row (rotation-v2: serviced and released) does NOT count — it's not currently on Spotify's real allowlist and needs a fresh add. */
 export async function isIdentityAllowlisted(email: string): Promise<boolean> {
 	const [row] = await db
-		.select({ id: spotifyAllowlistEntry.id })
+		.select({ status: spotifyAllowlistEntry.status })
 		.from(spotifyAllowlistEntry)
 		.where(sql`lower(${spotifyAllowlistEntry.email}) = lower(${email})`);
-	return !!row;
+	return row?.status === "on_list";
 }
 
 /**
- * Adds `email` to the real Spotify Dev Mode allowlist and records it as permanent — never removed (#392).
- * A no-op (no Spotify call) if the email is already on record. Throws AllowlistCapacityError before ever
- * calling Spotify once the 4 real-user seats are taken (the 5th is the admin-reserved seat, no row here).
+ * Reactivates an existing off-list entry to on_list for the rotation
+ * dispatcher, under the SAME advisory lock and on_list capacity re-check
+ * `ensureAllowlisted` uses for new admissions — without this, a scheduled
+ * rotation visit and a brand-new onboarding sign-in could each independently
+ * observe room under the cap and both flip to on_list, landing more real
+ * users on Spotify's actual allowlist than either the app's own
+ * MAX_ALLOWLISTED_REAL_USERS cap or Spotify's real 5-email limit allows.
+ * Returns false (no seat available right now) rather than throwing — the
+ * caller should treat that the same as a budget wait, not a real failure.
+ */
+export async function reserveRotationSeat(entryId: number): Promise<boolean> {
+	return db.transaction(async (tx) => {
+		await tx.execute(
+			sql`select pg_advisory_xact_lock(hashtext('sonaraem_spotify_allowlist_capacity'))`,
+		);
+
+		const [countRow] = await tx
+			.select({ count: sql<number>`count(*)::int` })
+			.from(spotifyAllowlistEntry)
+			.where(eq(spotifyAllowlistEntry.status, "on_list"));
+		if ((countRow?.count ?? 0) >= MAX_ALLOWLISTED_REAL_USERS) {
+			return false;
+		}
+
+		await tx
+			.update(spotifyAllowlistEntry)
+			.set({ status: "on_list" })
+			.where(eq(spotifyAllowlistEntry.id, entryId));
+		return true;
+	});
+}
+
+/**
+ * Adds `email` to the real Spotify Dev Mode allowlist (rotation-v2, docs/decisions/0001 — supersedes
+ * #392's permanent model). A no-op (no Spotify call) if the email already occupies a rotating seat.
+ * Throws AllowlistCapacityError before ever calling Spotify once all `MAX_ALLOWLISTED_REAL_USERS` seats
+ * are currently `on_list` (the 5th real seat is the admin-reserved one, no row here) — a row that exists
+ * but is `off_list` (already serviced and released by the rotation dispatcher) does NOT count against
+ * capacity and gets reactivated rather than re-inserted.
  *
- * The existing-email check, capacity check, and row insert all happen inside one Postgres transaction
- * holding a session-wide advisory lock (`pg_advisory_xact_lock`), so two concurrent sign-ins can't both
- * observe "count < N" before either commits — the second waits for the first's transaction to finish and
- * then re-checks against the committed state. The lock auto-releases at transaction end, so it's never
- * held across the slow, external Spotify dashboard automation call below.
+ * The existing-email check, capacity check, and row insert/reactivate all happen inside one Postgres
+ * transaction holding a session-wide advisory lock (`pg_advisory_xact_lock`), so two concurrent sign-ins
+ * can't both observe "count < N" before either commits — the second waits for the first's transaction to
+ * finish and then re-checks against the committed state. The lock auto-releases at transaction end, so
+ * it's never held across the slow, external Spotify dashboard automation call below.
  */
 export async function ensureAllowlisted(
 	identity: AllowlistIdentity,
@@ -56,16 +92,30 @@ export async function ensureAllowlisted(
 		);
 
 		const [existing] = await tx
-			.select({ id: spotifyAllowlistEntry.id })
+			.select({
+				id: spotifyAllowlistEntry.id,
+				status: spotifyAllowlistEntry.status,
+			})
 			.from(spotifyAllowlistEntry)
 			.where(sql`lower(${spotifyAllowlistEntry.email}) = lower(${email})`);
-		if (existing) return null;
+		// A racing transaction already reactivated/inserted this email while we waited on the lock.
+		if (existing?.status === "on_list") return null;
 
 		const [countRow] = await tx
 			.select({ count: sql<number>`count(*)::int` })
-			.from(spotifyAllowlistEntry);
+			.from(spotifyAllowlistEntry)
+			.where(eq(spotifyAllowlistEntry.status, "on_list"));
 		if ((countRow?.count ?? 0) >= MAX_ALLOWLISTED_REAL_USERS) {
 			throw new AllowlistCapacityError();
+		}
+
+		if (existing) {
+			// Reactivate in place (unique index on email rejects a duplicate insert); inlined, not markRotationEntryOnList, since that runs against the module-level `db` and this must stay inside THIS transaction.
+			await tx
+				.update(spotifyAllowlistEntry)
+				.set({ status: "on_list" })
+				.where(eq(spotifyAllowlistEntry.id, existing.id));
+			return { id: existing.id, reactivated: true as const };
 		}
 
 		const [insertedRow] = await tx
@@ -76,30 +126,26 @@ export async function ensureAllowlisted(
 				waitlistSignupId: identity.waitlistSignupId ?? null,
 			})
 			.returning({ id: spotifyAllowlistEntry.id });
-		return insertedRow ?? null;
+		return insertedRow
+			? { id: insertedRow.id, reactivated: false as const }
+			: null;
 	});
 
 	// null means a racing transaction already committed this email while we waited on the lock.
 	if (!reserved) return { alreadyAllowlisted: true };
 
 	try {
-		// triggerAndWait only works from inside another task's run() — this runs from a plain auth request handler, so trigger + poll is the supported way to wait for the result here.
-		const handle = await manageAllowlistEntryTask.trigger({
-			email,
-			action: "add",
-		});
-		const result = await runs.poll(handle);
-		if (!result.isSuccess) {
-			throw new Error(
-				result.error?.message ??
-					`Spotify allowlist automation run ${result.status.toLowerCase()}`,
-			);
-		}
+		await runAllowlistMutation(email, "add");
 	} catch (err) {
-		// Don't leave a row claiming Spotify access that was never actually granted.
-		await db
-			.delete(spotifyAllowlistEntry)
-			.where(eq(spotifyAllowlistEntry.id, reserved.id));
+		if (reserved.reactivated) {
+			// Real onboarding history, not a failed create — roll status back instead of deleting. Not inside the transaction here, so free to reuse the shared helper.
+			await markRotationEntryOffList(reserved.id);
+		} else {
+			// Don't leave a row claiming Spotify access that was never actually granted.
+			await db
+				.delete(spotifyAllowlistEntry)
+				.where(eq(spotifyAllowlistEntry.id, reserved.id));
+		}
 		throw err;
 	}
 
