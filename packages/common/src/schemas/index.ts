@@ -1,5 +1,6 @@
 export * from "./account";
 export * from "./admin";
+export * from "./billing";
 export * from "./classification";
 export * from "./cluster";
 export * from "./email";
