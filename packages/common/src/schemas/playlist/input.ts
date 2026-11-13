@@ -27,6 +27,7 @@ export const playlistListInput = z.object({
 	limit: z.number().int().min(1).max(50).default(20),
 	search: z.string().optional(),
 	sort: playlistSortEnum.default("recent"),
+	tags: z.array(z.string()).optional(),
 });
 export type PlaylistListInput = z.infer<typeof playlistListInput>;
 

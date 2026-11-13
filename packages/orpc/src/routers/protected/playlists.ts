@@ -25,7 +25,17 @@ import {
 } from "@sonaraem/db/schema/playlist";
 import { track } from "@sonaraem/db/schema/track";
 import { trackAnalysis } from "@sonaraem/db/schema/track-analysis";
-import { and, asc, desc, eq, gt, ilike, lt, or } from "drizzle-orm";
+import {
+	and,
+	arrayOverlaps,
+	asc,
+	desc,
+	eq,
+	gt,
+	ilike,
+	lt,
+	or,
+} from "drizzle-orm";
 import { z } from "zod";
 import { approvedProcedure } from "../../procedures";
 
@@ -44,9 +54,13 @@ export const playlistsRouter = {
 		.output(playlistListOutputSchema)
 		.handler(async ({ input, context }) => {
 			const userId = context.session.user.id;
-			const searchCondition = input.search
-				? ilike(playlist.name, `%${input.search}%`)
-				: undefined;
+			const baseWhere = and(
+				eq(playlist.userId, userId),
+				input.search ? ilike(playlist.name, `%${input.search}%`) : undefined,
+				input.tags?.length
+					? arrayOverlaps(playlist.tags, input.tags)
+					: undefined,
+			);
 
 			if (input.sort === "recent") {
 				const rows = await db
@@ -54,9 +68,8 @@ export const playlistsRouter = {
 					.from(playlist)
 					.where(
 						and(
-							eq(playlist.userId, userId),
+							baseWhere,
 							input.cursor != null ? lt(playlist.id, input.cursor) : undefined,
-							searchCondition,
 						),
 					)
 					.orderBy(desc(playlist.id))
@@ -81,7 +94,7 @@ export const playlistsRouter = {
 			const rows = await db
 				.select()
 				.from(playlist)
-				.where(and(eq(playlist.userId, userId), searchCondition))
+				.where(baseWhere)
 				.orderBy(...orderBy)
 				.limit(input.limit + 1)
 				.offset(offset);
@@ -90,6 +103,22 @@ export const playlistsRouter = {
 			const nextCursor = hasMore ? offset + input.limit : null;
 
 			return { items: page, nextCursor };
+		}),
+
+	listTags: approvedProcedure
+		.input(emptyInput)
+		.output(z.array(z.string()))
+		.handler(async ({ context }) => {
+			const userId = context.session.user.id;
+			const rows = await db
+				.select({ tags: playlist.tags })
+				.from(playlist)
+				.where(eq(playlist.userId, userId));
+
+			const tags = new Set(
+				rows.flatMap((row) => row.tags?.filter(Boolean) ?? []),
+			);
+			return [...tags].sort((a, b) => a.localeCompare(b));
 		}),
 
 	getById: approvedProcedure
