@@ -59,6 +59,11 @@ export default function SettingsPage() {
 		theme,
 		resolvedTheme,
 		setTheme,
+		isPro,
+		planExpiresAt,
+		planLoading,
+		checkoutUrl,
+		portalUrl,
 		signOut,
 		deleteAccount,
 	} = useSettingsController();
@@ -161,7 +166,55 @@ export default function SettingsPage() {
 
 			<DashboardSettingsSection label="ACCOUNT">
 				<DashboardSettingsRow label="Email" value={email ?? "..."} />
-				<DashboardSettingsRow label="Plan" value="Free" />
+				<DashboardSettingsRow
+					label="Plan"
+					value={
+						planLoading ? (
+							"..."
+						) : (
+							<div className="flex items-center gap-3">
+								<Badge
+									variant={isPro ? "default" : "secondary"}
+									className={
+										isPro
+											? "bg-gradient-to-r from-emerald-500 to-teal-600 font-medium text-white shadow-sm hover:from-emerald-600 hover:to-teal-700"
+											: "text-xs"
+									}
+								>
+									{isPro ? "Pro" : "Free"}
+								</Badge>
+								{isPro && planExpiresAt && (
+									<span className="text-muted-foreground text-xs">
+										Renews{" "}
+										{formatDistanceToNow(planExpiresAt, { addSuffix: true })}
+									</span>
+								)}
+								{isPro && portalUrl && (
+									<a
+										href={portalUrl}
+										target="_blank"
+										rel="noopener noreferrer"
+										className="text-primary text-xs hover:underline"
+									>
+										Manage subscription
+									</a>
+								)}
+								{!isPro && checkoutUrl && (
+									<Button
+										size="sm"
+										variant="outline"
+										className="h-7 px-2.5 font-medium text-xs"
+										onClick={() => {
+											window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+										}}
+									>
+										Upgrade to Pro
+									</Button>
+								)}
+							</div>
+						)
+					}
+				/>
 			</DashboardSettingsSection>
 
 			<DashboardSettingsSection label="PREFERENCES">

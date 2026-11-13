@@ -25,6 +25,10 @@ export const user = pgTable(
 		banned: boolean("banned").default(false),
 		banReason: text("ban_reason"),
 		banExpires: timestamp("ban_expires"),
+		plan: text("plan").default("free").notNull(),
+		planExpiresAt: timestamp("plan_expires_at"),
+		polarCustomerId: text("polar_customer_id"),
+		polarSubscriptionId: text("polar_subscription_id"),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at")
 			.defaultNow()
@@ -36,6 +40,8 @@ export const user = pgTable(
 		uniqueIndex("user_single_admin_idx")
 			.on(table.role)
 			.where(sql`${table.role} = 'admin'`),
+		index("user_polar_customer_id_idx").on(table.polarCustomerId),
+		index("user_polar_subscription_id_idx").on(table.polarSubscriptionId),
 	],
 );
 
