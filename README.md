@@ -22,11 +22,11 @@
 
 
 <!-- STATS:START -->
-<!-- STATS:DATA tracksEmbedded=4464 tracksTagged=3859 playlistsGenerated=29 -->
+<!-- STATS:DATA tracksEmbedded=4464 tracksTagged=3859 playlistsGenerated=32 -->
 <p align="center">
-  <img alt="Library stats" src="https://shieldcn.dev/group/badge/Tracks_embedded-4464-18181b+badge/Tracks_tagged-3859-18181b+badge/Playlists_generated-29-18181b.svg?variant=secondary&mode=dark" />
+  <img alt="Library stats" src="https://shieldcn.dev/group/badge/Tracks_embedded-4464-18181b+badge/Tracks_tagged-3859-18181b+badge/Playlists_generated-32-18181b.svg?variant=secondary&mode=dark" />
 </p>
-<p align="center"><sub>Last updated: 2026-11-10</sub></p>
+<p align="center"><sub>Last updated: 2026-11-16</sub></p>
 <!-- STATS:END -->
 
 ## What it does
